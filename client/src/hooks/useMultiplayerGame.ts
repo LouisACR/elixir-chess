@@ -754,8 +754,11 @@ export function useMultiplayerGame() {
       const piece = chessRef.current.get(square as Square);
       const isOwnPiece = piece && piece.color === playerColor;
 
-      // === DURING MY TURN ===
+      // === DURING MY TURN (no premoves allowed) ===
       if (isMyTurnNow) {
+        // Clear any pending premove visuals when it's our turn
+        setPremoveValidMoves([]);
+
         // If we have a selected square and click a valid move target, make the move
         if (selectedSquare && validMoves.includes(square)) {
           makeMove(selectedSquare as Square, square as Square);
@@ -783,6 +786,7 @@ export function useMultiplayerGame() {
           setSelectedSquare(null);
           setValidMoves([]);
         }
+        return; // Exit early - no premove logic during our turn
       }
       // === DURING OPPONENT'S TURN (PREMOVE MODE) ===
       else {

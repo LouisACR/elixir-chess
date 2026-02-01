@@ -372,7 +372,7 @@ export class GameRoom {
       rows[rankIndex] = compressedRow;
 
       const newFen = [rows.join("/"), ...rest].join(" ");
-      this.chess.load(newFen);
+      this.chess.load(newFen, { skipValidation: true });
       success = true;
     } else {
       success = this.chess.put({ type, color: playerColor }, square as Square);
@@ -403,7 +403,8 @@ export class GameRoom {
     const fen = this.chess.fen();
     const parts = fen.split(" ");
     parts[1] = playerColor === "w" ? "b" : "w";
-    this.chess.load(parts.join(" "));
+    // Use skipValidation to allow non-standard positions (e.g., pawns on back rank)
+    this.chess.load(parts.join(" "), { skipValidation: true });
 
     // Update game state
     this.gameState.fen = this.chess.fen();
@@ -513,7 +514,7 @@ export class GameRoom {
     this.chess = new Chess(INITIAL_FEN);
     this.gameState = this.createInitialGameState();
     this.gameState.status = "playing";
-    
+
     // Clear premoves
     this.premoves = { w: [], b: [] };
 
