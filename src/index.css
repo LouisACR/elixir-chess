@@ -1,8 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@700;800;900&display=swap");
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 html,
 body,
@@ -12,98 +10,54 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
+  position: fixed;
+  inset: 0;
   overscroll-behavior: none;
   touch-action: manipulation;
   font-family: "Nunito", sans-serif;
-  position: fixed;
-  inset: 0;
 }
 
-/* Clash Royale style background */
+/* Clash Royale style dark blue background */
 .game-bg {
   background: linear-gradient(
     180deg,
-    #1a1a2e 0%,
-    #16213e 30%,
-    #0f3460 60%,
-    #1a1a2e 100%
+    #0f0f1a 0%,
+    #1a1a2e 20%,
+    #16213e 50%,
+    #1a1a2e 80%,
+    #0f0f1a 100%
   );
   background-attachment: fixed;
 }
 
-/* Glowing elixir bar */
-.elixir-bar {
-  background: linear-gradient(90deg, #7c3aed, #ec4899, #f472b6);
-  box-shadow:
-    0 0 20px rgba(236, 72, 153, 0.6),
-    0 0 40px rgba(124, 58, 237, 0.4);
-  animation: elixir-glow 2s ease-in-out infinite alternate;
-}
-
-@keyframes elixir-glow {
-  from {
-    box-shadow:
-      0 0 15px rgba(236, 72, 153, 0.5),
-      0 0 30px rgba(124, 58, 237, 0.3);
-  }
-  to {
-    box-shadow:
-      0 0 25px rgba(236, 72, 153, 0.8),
-      0 0 50px rgba(124, 58, 237, 0.5);
-  }
-}
-
-/* Card glow effect */
-.card-glow {
-  box-shadow:
-    0 4px 15px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.card-glow-active {
-  box-shadow:
-    0 0 20px rgba(251, 191, 36, 0.6),
-    0 4px 15px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-/* Title style */
+/* Title style - Clash Royale font */
 .game-title {
   font-family: "Lilita One", cursive;
   text-shadow:
-    0 4px 0 #1e3a5f,
-    0 6px 10px rgba(0, 0, 0, 0.5);
+    0 2px 0 #1e3a5f,
+    0 4px 8px rgba(0, 0, 0, 0.5);
 }
 
-/* Check pulse animation */
-@keyframes check-pulse {
-  0%,
-  100% {
-    box-shadow: inset 0 0 0 4px rgba(239, 68, 68, 0.8);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 0 6px rgba(239, 68, 68, 1),
-      0 0 20px rgba(239, 68, 68, 0.6);
-  }
-}
-
-.check-pulse {
-  animation: check-pulse 0.8s ease-in-out infinite;
-}
-
-/* Elixir gain floating animation */
-@keyframes elixirGainFloat {
+/* Elixir gain float up and fade animation */
+@keyframes elixir-float-fade {
   0% {
+    transform: translateY(-50%) scale(0.5);
     opacity: 0;
-    transform: translateY(0) scale(0.5);
   }
-  20% {
+  15% {
+    transform: translateY(-50%) scale(1.2);
     opacity: 1;
-    transform: translateY(-5px) scale(1.2);
+  }
+  30% {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
   }
   100% {
+    transform: translateY(calc(-50% - 30px)) scale(1);
     opacity: 0;
-    transform: translateY(-25px) scale(1);
   }
+}
+
+.animate-elixir-gain {
+  animation: elixir-float-fade 1s ease-out forwards;
 }

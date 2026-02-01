@@ -1,5 +1,8 @@
-import type { PlayerColor } from "../types/game";
-import { MAX_ELIXIR } from "../constants/game";
+// ============================================
+// Elixir Utilities
+// ============================================
+
+import { MAX_ELIXIR } from "./index.js";
 
 /**
  * Deduct elixir cost from player's total

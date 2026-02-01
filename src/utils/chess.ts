@@ -1,6 +1,6 @@
 import type { Chess, Square } from "chess.js";
-import type { PieceType, PlayerColor } from "../types/game";
-import { PLACEMENT_ZONES, PIECE_COSTS } from "../constants/game";
+import type { PieceType, PlayerColor } from "@elixir-chess/shared";
+import { PLACEMENT_ZONES, PIECE_COSTS } from "@elixir-chess/shared";
 
 /**
  * Check if a square is in the placement zone for a given player
@@ -42,7 +42,38 @@ export function wouldBlockCheck(
   const originalFen = game.fen();
 
   try {
-    const success = game.put({ type, color: turn }, square as Square);
+    const rank = parseInt(square[1]);
+    const isPawnOnBackRank = type === "p" && (rank === 1 || rank === 8);
+
+    let success: boolean;
+    if (isPawnOnBackRank) {
+      // chess.js doesn't allow pawns on rank 1 or 8, so manipulate FEN directly
+      const currentFen = game.fen();
+      const [position, ...rest] = currentFen.split(" ");
+      const rows = position.split("/");
+      const rankIndex = 8 - rank;
+      const file = square.charCodeAt(0) - 97;
+
+      let expandedRow = rows[rankIndex].replace(/[1-8]/g, (m) =>
+        ".".repeat(parseInt(m)),
+      );
+      const pieceChar = turn === "w" ? "P" : "p";
+      expandedRow =
+        expandedRow.substring(0, file) +
+        pieceChar +
+        expandedRow.substring(file + 1);
+      const compressedRow = expandedRow.replace(/\.+/g, (m) =>
+        m.length.toString(),
+      );
+      rows[rankIndex] = compressedRow;
+
+      const newFen = [rows.join("/"), ...rest].join(" ");
+      game.load(newFen);
+      success = true;
+    } else {
+      success = game.put({ type, color: turn }, square as Square);
+    }
+
     if (!success) {
       game.load(originalFen);
       return false;

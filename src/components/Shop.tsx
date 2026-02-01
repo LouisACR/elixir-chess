@@ -2,11 +2,13 @@ import React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { PieceIcon } from "./PieceIcons";
-import { PIECE_COSTS, PIECE_NAMES, RARITY_COLORS } from "../constants/game";
-import type { PieceType, PlayerColor, CardHand } from "../types/game";
+import { ElixirCostBadge } from "./ClashAssets";
+import { PIECE_COSTS, PIECE_NAMES } from "@elixir-chess/shared";
+import type { PieceType, PlayerColor, CardHand } from "@elixir-chess/shared";
+import { clsx } from "clsx";
 
 // ============================================
-// Shop Card Component
+// Clash Royale Style Card Component
 // ============================================
 
 interface CardProps {
@@ -25,89 +27,178 @@ const Card: React.FC<CardProps> = ({ type, color, cost, canAfford, index }) => {
       disabled: !canAfford,
     });
 
-  const rarityColor =
-    RARITY_COLORS[type as Exclude<PieceType, "k">] ?? "#6b7280";
-
-  const cardStyle: React.CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0 : 1,
-    cursor: canAfford ? "grab" : "not-allowed",
-    touchAction: "none",
-    background: canAfford
-      ? "linear-gradient(180deg, #374151 0%, #1f2937 100%)"
-      : "linear-gradient(180deg, #1f2937 0%, #111827 100%)",
-    borderRadius: 12,
-    padding: "8px 4px",
-    border: canAfford ? `2px solid ${rarityColor}` : "2px solid #374151",
-    filter: canAfford ? "none" : "grayscale(1)",
-    minWidth: 70,
-    position: "relative",
-    boxShadow: canAfford
-      ? `0 4px 15px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1), 0 0 12px ${rarityColor}40`
-      : "none",
-    transition: "transform 0.15s ease, box-shadow 0.15s ease",
-  };
-
   return (
     <div
       ref={setNodeRef}
-      style={cardStyle}
+      style={{ transform: CSS.Translate.toString(transform) }}
       {...listeners}
       {...attributes}
       data-testid={`card-${type}-${index}`}
+      className={clsx(
+        "relative w-[76px] h-[100px] touch-none transition-all duration-150",
+        isDragging && "opacity-0",
+        canAfford
+          ? "cursor-grab hover:scale-105 hover:-translate-y-2"
+          : "cursor-not-allowed",
+      )}
     >
-      <div className="flex flex-col items-center gap-1">
-        {/* Piece Icon */}
-        <div
-          className="w-11 h-11"
-          style={{
-            filter: canAfford
-              ? "drop-shadow(0 2px 4px rgba(0,0,0,0.5))"
-              : "none",
-          }}
-        >
-          <PieceIcon type={type} color={color} className="w-full h-full" />
-        </div>
+      {/* Card SVG Background */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 76 100"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          {/* Card gradient - Clash Royale green */}
+          <linearGradient
+            id={`cardGrad-${index}`}
+            x1="0%"
+            y1="0%"
+            x2="0%"
+            y2="100%"
+          >
+            {canAfford ? (
+              <>
+                <stop offset="0%" stopColor="#5a7f4a" />
+                <stop offset="20%" stopColor="#4a6f3c" />
+                <stop offset="80%" stopColor="#3a5f2e" />
+                <stop offset="100%" stopColor="#2a4f20" />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="#4a4a4a" />
+                <stop offset="100%" stopColor="#2a2a2a" />
+              </>
+            )}
+          </linearGradient>
 
-        {/* Piece Name */}
-        <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wide">
+          {/* Border gradient */}
+          <linearGradient
+            id={`borderGrad-${index}`}
+            x1="0%"
+            y1="0%"
+            x2="0%"
+            y2="100%"
+          >
+            {canAfford ? (
+              <>
+                <stop offset="0%" stopColor="#a8d89a" />
+                <stop offset="50%" stopColor="#7ab868" />
+                <stop offset="100%" stopColor="#5a9848" />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="#666" />
+                <stop offset="100%" stopColor="#444" />
+              </>
+            )}
+          </linearGradient>
+
+          {/* Drop shadow */}
+          <filter
+            id={`cardShadow-${index}`}
+            x="-20%"
+            y="-10%"
+            width="140%"
+            height="130%"
+          >
+            <feDropShadow
+              dx="0"
+              dy="4"
+              stdDeviation="3"
+              floodColor="#000"
+              floodOpacity="0.5"
+            />
+          </filter>
+        </defs>
+
+        {/* Card body */}
+        <rect
+          x="3"
+          y="3"
+          width="70"
+          height="94"
+          rx="8"
+          fill={`url(#cardGrad-${index})`}
+          filter={`url(#cardShadow-${index})`}
+        />
+
+        {/* Card border */}
+        <rect
+          x="3"
+          y="3"
+          width="70"
+          height="94"
+          rx="8"
+          fill="none"
+          stroke={`url(#borderGrad-${index})`}
+          strokeWidth="3"
+        />
+
+        {/* Top highlight */}
+        <rect
+          x="8"
+          y="6"
+          width="60"
+          height="3"
+          rx="1.5"
+          fill="rgba(255,255,255,0.25)"
+        />
+
+        {/* Inner card area */}
+        <rect
+          x="8"
+          y="12"
+          width="60"
+          height="60"
+          rx="4"
+          fill="rgba(0,0,0,0.2)"
+        />
+
+        {/* Name plate */}
+        <rect
+          x="6"
+          y="76"
+          width="64"
+          height="18"
+          rx="4"
+          fill="rgba(0,0,0,0.4)"
+        />
+      </svg>
+
+      {/* Elixir Cost Badge - Top Left */}
+      <div className="absolute -top-2 -left-2 z-20">
+        <ElixirCostBadge cost={cost} canAfford={canAfford} size="md" />
+      </div>
+
+      {/* Piece Icon */}
+      <div
+        className={clsx(
+          "absolute top-4 left-1/2 -translate-x-1/2 w-12 h-12",
+          canAfford
+            ? "drop-shadow-[0_3px_6px_rgba(0,0,0,0.7)]"
+            : "grayscale opacity-50",
+        )}
+      >
+        <PieceIcon type={type} color={color} className="w-full h-full" />
+      </div>
+
+      {/* Piece Name */}
+      <div className="absolute bottom-2 left-0 right-0 text-center">
+        <span
+          className={clsx(
+            "text-[10px] font-bold uppercase tracking-wide",
+            canAfford
+              ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+              : "text-gray-400",
+          )}
+        >
           {PIECE_NAMES[type]}
         </span>
-
-        {/* Cost Badge */}
-        <CostBadge cost={cost} canAfford={canAfford} />
       </div>
     </div>
   );
 };
-
-// ============================================
-// Cost Badge Component
-// ============================================
-
-interface CostBadgeProps {
-  cost: number;
-  canAfford: boolean;
-}
-
-const CostBadge: React.FC<CostBadgeProps> = ({ cost, canAfford }) => (
-  <div
-    style={{
-      background: canAfford
-        ? "linear-gradient(135deg, #7c3aed, #ec4899)"
-        : "#374151",
-      padding: "3px 10px",
-      borderRadius: 12,
-      display: "flex",
-      alignItems: "center",
-      gap: 4,
-      boxShadow: canAfford ? "0 0 10px rgba(236, 72, 153, 0.4)" : "none",
-    }}
-  >
-    <span className="text-xs">💧</span>
-    <span className="text-white text-[13px] font-black">{cost}</span>
-  </div>
-);
 
 // ============================================
 // Next Card Preview Component
@@ -119,25 +210,45 @@ interface NextCardPreviewProps {
 }
 
 const NextCardPreview: React.FC<NextCardPreviewProps> = ({ type, color }) => {
-  const rarityColor =
-    RARITY_COLORS[type as Exclude<PieceType, "k">] ?? "#6b7280";
-
   return (
-    <div className="flex flex-col items-center gap-1 opacity-60">
-      <span className="text-gray-400 text-[9px] font-bold uppercase tracking-wide">
+    <div className="flex flex-col items-center gap-1">
+      {/* "Next" Label */}
+      <span className="text-[#7ab868] text-[9px] font-bold uppercase tracking-wider">
         Next
       </span>
-      <div
-        style={{
-          background: "linear-gradient(180deg, #1f2937 0%, #111827 100%)",
-          borderRadius: 8,
-          padding: 6,
-          border: `2px dashed ${rarityColor}60`,
-          width: 50,
-        }}
-      >
-        <div className="w-9 h-9 mx-auto">
-          <PieceIcon type={type} color={color} className="w-full h-full" />
+
+      {/* Mini Card */}
+      <div className="relative w-[54px] h-[70px]">
+        <svg
+          className="absolute inset-0 w-full h-full"
+          viewBox="0 0 54 70"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <linearGradient id="nextCardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#3a5f2e" stopOpacity="0.7" />
+              <stop offset="100%" stopColor="#1a3f10" stopOpacity="0.7" />
+            </linearGradient>
+          </defs>
+
+          <rect
+            x="2"
+            y="2"
+            width="50"
+            height="66"
+            rx="6"
+            fill="url(#nextCardGrad)"
+            stroke="#5a9848"
+            strokeWidth="2"
+            strokeDasharray="4 2"
+          />
+        </svg>
+
+        {/* Piece */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-9 h-9 opacity-60">
+            <PieceIcon type={type} color={color} className="w-full h-full" />
+          </div>
         </div>
       </div>
     </div>
@@ -145,7 +256,7 @@ const NextCardPreview: React.FC<NextCardPreviewProps> = ({ type, color }) => {
 };
 
 // ============================================
-// Shop Component
+// Shop Component (Card Hand)
 // ============================================
 
 interface ShopProps {
@@ -156,17 +267,9 @@ interface ShopProps {
 
 export const Shop: React.FC<ShopProps> = ({ turn, elixir, hand }) => {
   return (
-    <div
-      className="w-full"
-      style={{
-        background:
-          "linear-gradient(0deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%)",
-        padding: "12px 8px 20px",
-        borderTop: "2px solid rgba(124, 58, 237, 0.4)",
-      }}
-    >
-      {/* Cards Container */}
-      <div className="flex justify-center items-end gap-2 max-w-[450px] mx-auto">
+    <div className="w-full bg-gradient-to-t from-[#0a0a14] via-[#12121f] to-transparent pt-3 pb-5 px-2">
+      {/* Cards Row */}
+      <div className="flex justify-center items-end gap-1 max-w-[420px] mx-auto">
         {/* Hand Cards */}
         {hand.cards.map((type, index) => (
           <Card
@@ -180,24 +283,11 @@ export const Shop: React.FC<ShopProps> = ({ turn, elixir, hand }) => {
         ))}
 
         {/* Separator */}
-        <div
-          className="mx-1"
-          style={{
-            width: 1,
-            height: 60,
-            background:
-              "linear-gradient(180deg, transparent, #4b5563, transparent)",
-          }}
-        />
+        <div className="mx-2 h-[80px] w-px bg-gradient-to-b from-transparent via-[#5a9848]/50 to-transparent" />
 
         {/* Next Card Preview */}
         <NextCardPreview type={hand.nextCard} color={turn} />
       </div>
-
-      {/* Hint Text */}
-      <p className="text-center text-gray-500 text-[11px] mt-2 font-semibold">
-        Drag a card to place it • Cards cycle after each use
-      </p>
     </div>
   );
 };

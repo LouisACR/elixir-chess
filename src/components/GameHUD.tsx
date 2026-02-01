@@ -1,8 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { MAX_ELIXIR } from "../types/game";
-import type { GameState, PlayerColor } from "../types/game";
-import { RotateCcw, Crown } from "lucide-react";
-import type { ElixirGainEvent } from "../hooks/useElixirChess";
+import { MAX_ELIXIR } from "@elixir-chess/shared";
+import type {
+  GameState,
+  PlayerColor,
+  ElixirGainEvent,
+} from "@elixir-chess/shared";
+import { RotateCcw, Swords } from "lucide-react";
+import { ElixirDrop, CrownIcon } from "./ClashAssets";
+import { clsx } from "clsx";
+
+// ============================================
+// Helper Functions
+// ============================================
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
 
 // ============================================
 // Elixir Gain Animation Component
@@ -10,13 +25,11 @@ import type { ElixirGainEvent } from "../hooks/useElixirChess";
 
 interface ElixirGainAnimationProps {
   amount: number;
-  color: PlayerColor;
   onComplete: () => void;
 }
 
 const ElixirGainAnimation: React.FC<ElixirGainAnimationProps> = ({
   amount,
-  color,
   onComplete,
 }) => {
   const [visible, setVisible] = useState(true);
@@ -31,31 +44,9 @@ const ElixirGainAnimation: React.FC<ElixirGainAnimationProps> = ({
 
   if (!visible) return null;
 
-  const isWhite = color === "w";
-  const glowColor = isWhite
-    ? "rgba(59, 130, 246, 0.8)"
-    : "rgba(236, 72, 153, 0.8)";
-
   return (
-    <div
-      style={{
-        position: "absolute",
-        right: 40,
-        top: "50%",
-        transform: "translateY(-50%)",
-        animation: "elixirGainFloat 1s ease-out forwards",
-        pointerEvents: "none",
-        zIndex: 10,
-      }}
-    >
-      <span
-        style={{
-          color: "#22c55e",
-          fontWeight: 900,
-          fontSize: 18,
-          textShadow: `0 0 10px ${glowColor}, 0 0 20px rgba(34, 197, 94, 0.8)`,
-        }}
-      >
+    <div className="absolute -right-8 top-1/2 pointer-events-none z-10 animate-elixir-gain">
+      <span className="text-[#e879f9] font-black text-xl drop-shadow-[0_0_10px_rgba(232,121,249,0.9)]">
         +{amount}
       </span>
     </div>
@@ -63,269 +54,194 @@ const ElixirGainAnimation: React.FC<ElixirGainAnimationProps> = ({
 };
 
 // ============================================
-// Helper Functions
-// ============================================
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-// ============================================
-// Elixir Bar Component
+// Clash Royale Style Elixir Bar (SVG Based)
 // ============================================
 
 interface ElixirBarProps {
   elixir: number;
-  timer: number;
-  color: PlayerColor;
+  maxElixir?: number;
   isCurrentTurn: boolean;
-  isInCheck?: boolean;
-  position: "top" | "bottom";
+  color: PlayerColor;
   elixirGain?: ElixirGainEvent | null;
 }
 
 const ElixirBar: React.FC<ElixirBarProps> = ({
   elixir,
-  timer,
-  color,
+  maxElixir = MAX_ELIXIR,
   isCurrentTurn,
-  isInCheck,
-  position,
+  color,
   elixirGain,
 }) => {
   const [showGainAnimation, setShowGainAnimation] = useState<number | null>(
     null,
   );
+  const fillPercent = (elixir / maxElixir) * 100;
 
-  // Show animation on the bar whose player gained elixir
   useEffect(() => {
     if (!elixirGain) return;
-
-    // Show animation if this bar's color matches the player who gained elixir
     if (elixirGain.player === color) {
       setShowGainAnimation(elixirGain.timestamp);
     }
   }, [elixirGain, color]);
 
-  const isWhite = color === "w";
-  const playerName = isWhite ? "White" : "Black";
-
-  // Different color schemes for each player
-  const barGradient = isWhite
-    ? "linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd)"
-    : "linear-gradient(90deg, #ec4899, #f472b6, #f9a8d4)";
-
-  const borderColor = isWhite
-    ? "rgba(59, 130, 246, 0.6)"
-    : "rgba(236, 72, 153, 0.6)";
-
-  const textColor = isWhite ? "#93c5fd" : "#f9a8d4";
-  const glowColor = isWhite
-    ? "rgba(59, 130, 246, 0.8)"
-    : "rgba(236, 72, 153, 0.8)";
-
   return (
-    <div
-      style={{
-        width: "100%",
-        maxWidth: 500,
-        margin: "0 auto",
-        padding: position === "top" ? "8px 16px 4px" : "4px 16px 8px",
-      }}
-    >
-      <div
-        style={{
-          background: "rgba(0, 0, 0, 0.6)",
-          borderRadius: 12,
-          padding: "6px 12px",
-          border: `2px solid ${borderColor}`,
-          opacity: isCurrentTurn ? 1 : 0.6,
-          transition: "opacity 0.3s ease",
-        }}
-      >
+    <div className={clsx("relative", !isCurrentTurn && "opacity-50")}>
+      <div className="flex items-center gap-2">
+        {/* Elixir Drop Icon */}
         <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexDirection: position === "top" ? "row" : "row",
-          }}
-        >
-          {/* Player Indicator with Turn Badge */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              minWidth: 100,
-            }}
-          >
-            <div
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: "50%",
-                background: isWhite
-                  ? "linear-gradient(135deg, #fff 0%, #d1d5db 100%)"
-                  : "linear-gradient(135deg, #374151 0%, #111827 100%)",
-                border: isCurrentTurn
-                  ? "2px solid #fbbf24"
-                  : "2px solid #6b7280",
-                boxShadow: isCurrentTurn
-                  ? "0 0 8px rgba(251, 191, 36, 0.5)"
-                  : "none",
-              }}
-            />
-            <span
-              style={{
-                color: isCurrentTurn ? "#fbbf24" : "#9ca3af",
-                fontWeight: 800,
-                fontSize: 12,
-                textTransform: "uppercase",
-                textShadow: isCurrentTurn
-                  ? "0 2px 4px rgba(0,0,0,0.5)"
-                  : "none",
-              }}
-            >
-              {playerName}
-            </span>
-            {/* Turn indicator - always takes space to prevent layout shift */}
-            <div
-              style={{
-                background: isCurrentTurn
-                  ? "linear-gradient(135deg, #fbbf24, #f59e0b)"
-                  : "transparent",
-                color: isCurrentTurn ? "#1f2937" : "transparent",
-                padding: "2px 6px",
-                borderRadius: 10,
-                fontSize: 9,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                visibility: isCurrentTurn ? "visible" : "hidden",
-              }}
-            >
-              TURN
-            </div>
-          </div>
-
-          {/* Check Badge */}
-          {isInCheck && isCurrentTurn && (
-            <div
-              style={{
-                background: "linear-gradient(135deg, #ef4444, #dc2626)",
-                color: "white",
-                padding: "2px 8px",
-                borderRadius: 10,
-                fontSize: 9,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                animation: "pulse 1s infinite",
-                boxShadow: "0 0 10px rgba(239, 68, 68, 0.6)",
-              }}
-            >
-              CHECK!
-            </div>
+          className={clsx(
+            "transition-transform duration-300",
+            isCurrentTurn && "scale-110",
           )}
+        >
+          <ElixirDrop
+            size={28}
+            className={clsx(
+              "transition-all duration-300",
+              isCurrentTurn && "drop-shadow-[0_0_8px_rgba(232,121,249,0.8)]",
+            )}
+          />
+        </div>
 
-          {/* Elixir Bar */}
-          <div
-            style={{
-              flex: 1,
-              height: 18,
-              background: "rgba(0, 0, 0, 0.5)",
-              borderRadius: 9,
-              overflow: "hidden",
-              position: "relative",
-              border: `1px solid ${borderColor}`,
-            }}
+        {/* Elixir Bar SVG */}
+        <div className="relative flex-1 h-6">
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox="0 0 200 24"
+            preserveAspectRatio="none"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            {/* Elixir Fill */}
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: `${(elixir / MAX_ELIXIR) * 100}%`,
-                background: barGradient,
-                borderRadius: 8,
-                transition: "width 0.3s ease-out",
-                boxShadow: `inset 0 2px 4px rgba(255,255,255,0.3)`,
-              }}
+            <defs>
+              {/* Bar background gradient */}
+              <linearGradient
+                id="elixirBarBg"
+                x1="0%"
+                y1="0%"
+                x2="0%"
+                y2="100%"
+              >
+                <stop offset="0%" stopColor="#1a1a2e" />
+                <stop offset="50%" stopColor="#0f0f1a" />
+                <stop offset="100%" stopColor="#1a1a2e" />
+              </linearGradient>
+
+              {/* Elixir fill gradient - pink/purple */}
+              <linearGradient
+                id="elixirFillGrad"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop offset="0%" stopColor="#9333ea" />
+                <stop offset="40%" stopColor="#c026d3" />
+                <stop offset="70%" stopColor="#e879f9" />
+                <stop offset="100%" stopColor="#f0abfc" />
+              </linearGradient>
+
+              {/* Shine overlay */}
+              <linearGradient
+                id="elixirShine"
+                x1="0%"
+                y1="0%"
+                x2="0%"
+                y2="100%"
+              >
+                <stop offset="0%" stopColor="rgba(255,255,255,0.5)" />
+                <stop offset="40%" stopColor="rgba(255,255,255,0.2)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+              </linearGradient>
+
+              {/* Glow filter */}
+              <filter
+                id="elixirBarGlow"
+                x="-10%"
+                y="-50%"
+                width="120%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                <feMerge>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            {/* Outer frame */}
+            <rect
+              x="1"
+              y="1"
+              width="198"
+              height="22"
+              rx="4"
+              fill="url(#elixirBarBg)"
+              stroke="#4a4a6a"
+              strokeWidth="2"
             />
 
-            {/* Segment markers */}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-              }}
-            >
-              {[...Array(MAX_ELIXIR)].map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    flex: 1,
-                    borderRight:
-                      i < MAX_ELIXIR - 1
-                        ? "1px solid rgba(255,255,255,0.1)"
-                        : "none",
-                  }}
-                />
-              ))}
-            </div>
-          </div>
+            {/* Inner dark area */}
+            <rect x="4" y="4" width="192" height="16" rx="2" fill="#0a0a12" />
 
-          {/* Elixir Count */}
-          <div
-            style={{
-              minWidth: 30,
-              textAlign: "center",
-              color: textColor,
-              fontWeight: 900,
-              fontSize: 16,
-              textShadow: `0 0 8px ${glowColor}`,
-              position: "relative",
-            }}
+            {/* Elixir fill */}
+            <rect
+              x="5"
+              y="5"
+              width={Math.max(0, 190 * (fillPercent / 100))}
+              height="14"
+              rx="2"
+              fill="url(#elixirFillGrad)"
+              filter={isCurrentTurn ? "url(#elixirBarGlow)" : undefined}
+              className="transition-[width] duration-300 ease-out"
+            />
+
+            {/* Shine on fill */}
+            <rect
+              x="5"
+              y="5"
+              width={Math.max(0, 190 * (fillPercent / 100))}
+              height="7"
+              rx="2"
+              fill="url(#elixirShine)"
+              className="transition-[width] duration-300"
+            />
+
+            {/* Segment lines */}
+            {[...Array(maxElixir - 1)].map((_, i) => (
+              <line
+                key={i}
+                x1={5 + (190 / maxElixir) * (i + 1)}
+                y1="5"
+                x2={5 + (190 / maxElixir) * (i + 1)}
+                y2="19"
+                stroke="#2a2a3e"
+                strokeWidth="1"
+              />
+            ))}
+          </svg>
+
+          {/* Elixir Gain Animation */}
+          {showGainAnimation && elixirGain && (
+            <ElixirGainAnimation
+              key={showGainAnimation}
+              amount={elixirGain.amount}
+              onComplete={() => setShowGainAnimation(null)}
+            />
+          )}
+        </div>
+
+        {/* Elixir Count */}
+        <div className="min-w-[32px] text-center">
+          <span
+            className={clsx(
+              "font-black text-xl tabular-nums",
+              isCurrentTurn
+                ? "text-[#e879f9] drop-shadow-[0_0_8px_rgba(232,121,249,0.8)]"
+                : "text-[#9333ea]",
+            )}
           >
             {elixir}
-            {/* Elixir Gain Animation */}
-            {showGainAnimation && elixirGain && (
-              <ElixirGainAnimation
-                key={showGainAnimation}
-                amount={elixirGain.amount}
-                color={elixirGain.player}
-                onComplete={() => setShowGainAnimation(null)}
-              />
-            )}
-          </div>
-
-          {/* Timer */}
-          <div
-            style={{
-              minWidth: 50,
-              textAlign: "center",
-              padding: "2px 8px",
-              borderRadius: 8,
-              background:
-                timer <= 30 ? "rgba(239, 68, 68, 0.3)" : "rgba(0, 0, 0, 0.4)",
-              border:
-                timer <= 30
-                  ? "1px solid #ef4444"
-                  : "1px solid rgba(255,255,255,0.1)",
-              color: timer <= 30 ? "#fca5a5" : "#d1d5db",
-              fontWeight: 900,
-              fontSize: 14,
-              fontFamily: "monospace",
-              animation:
-                timer <= 10 && isCurrentTurn ? "pulse 1s infinite" : "none",
-            }}
-          >
-            {formatTime(timer)}
-          </div>
+          </span>
         </div>
       </div>
     </div>
@@ -333,7 +249,136 @@ const ElixirBar: React.FC<ElixirBarProps> = ({
 };
 
 // ============================================
-// Top HUD (Opponent Elixir + Game Status)
+// Player Info Panel
+// ============================================
+
+interface PlayerPanelProps {
+  color: PlayerColor;
+  timer: number;
+  elixir: number;
+  isCurrentTurn: boolean;
+  isInCheck: boolean;
+  position: "top" | "bottom";
+  elixirGain?: ElixirGainEvent | null;
+}
+
+const PlayerPanel: React.FC<PlayerPanelProps> = ({
+  color,
+  timer,
+  elixir,
+  isCurrentTurn,
+  isInCheck,
+  position,
+  elixirGain,
+}) => {
+  const isWhite = color === "w";
+  const playerName = isWhite ? "White" : "Black";
+  const isLowTime = timer <= 30;
+  const isCriticalTime = timer <= 10;
+
+  return (
+    <div
+      className={clsx(
+        "w-full max-w-[420px] mx-auto px-3",
+        position === "top" ? "pt-1 pb-2" : "pt-2 pb-1",
+      )}
+    >
+      {/* Panel Container */}
+      <div
+        className={clsx(
+          "relative rounded-xl overflow-hidden transition-all duration-300",
+          isCurrentTurn
+            ? "bg-gradient-to-br from-[#2d2d4a] via-[#252540] to-[#1a1a2e]"
+            : "bg-[#1a1a2e]/70",
+        )}
+      >
+        {/* Active Turn Glow Border */}
+        {isCurrentTurn && (
+          <div className="absolute inset-0 rounded-xl border-2 border-[#c026d3]/70 shadow-[inset_0_0_20px_rgba(192,38,211,0.2)] pointer-events-none" />
+        )}
+
+        <div className="p-3">
+          {/* Top Row: Player Info + Timer */}
+          <div className="flex items-center justify-between mb-2.5">
+            {/* Player Info */}
+            <div className="flex items-center gap-2.5">
+              {/* Player Avatar */}
+              <div
+                className={clsx(
+                  "w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  isWhite
+                    ? "bg-gradient-to-br from-gray-100 to-gray-300 border-gray-400"
+                    : "bg-gradient-to-br from-gray-700 to-gray-900 border-gray-500",
+                  isCurrentTurn &&
+                    "shadow-[0_0_12px_rgba(192,38,211,0.6)] border-[#c026d3]",
+                )}
+              >
+                {isCurrentTurn && (
+                  <Swords
+                    size={16}
+                    className={clsx(
+                      "transition-colors",
+                      isWhite ? "text-gray-700" : "text-gray-300",
+                    )}
+                  />
+                )}
+              </div>
+
+              {/* Player Name + Turn Badge */}
+              <div className="flex flex-col">
+                <span
+                  className={clsx(
+                    "font-bold text-sm uppercase tracking-wide transition-colors",
+                    isCurrentTurn ? "text-white" : "text-gray-400",
+                  )}
+                >
+                  {playerName}
+                </span>
+                {isCurrentTurn && (
+                  <span className="text-[10px] font-bold text-[#e879f9] uppercase tracking-wider">
+                    Your Turn
+                  </span>
+                )}
+              </div>
+
+              {/* Check Badge */}
+              {isInCheck && (
+                <div className="bg-gradient-to-br from-red-500 to-red-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-black uppercase animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.7)]">
+                  ⚠️ CHECK!
+                </div>
+              )}
+            </div>
+
+            {/* Timer */}
+            <div
+              className={clsx(
+                "px-3 py-1.5 rounded-lg font-mono font-bold text-base transition-all",
+                isCriticalTime
+                  ? "bg-gradient-to-br from-red-600 to-red-800 border border-red-400 text-white animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+                  : isLowTime
+                    ? "bg-gradient-to-br from-amber-600 to-amber-800 border border-amber-400 text-white"
+                    : "bg-[#2a2a40] border border-[#4a4a6a] text-gray-200",
+              )}
+            >
+              {formatTime(timer)}
+            </div>
+          </div>
+
+          {/* Elixir Bar */}
+          <ElixirBar
+            elixir={elixir}
+            isCurrentTurn={isCurrentTurn}
+            color={color}
+            elixirGain={elixirGain}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// Top HUD (Game Status + Black Player)
 // ============================================
 
 interface TopHUDProps {
@@ -352,88 +397,50 @@ export const TopHUD: React.FC<TopHUDProps> = ({
   elixirGain,
 }) => {
   const { elixir, turn, status, winner } = gameState;
-  // Top always shows black's elixir (fixed position)
   const blackElixir = elixir.b;
   const blackTimer = timers.b;
   const isBlackTurn = turn === "b";
-  const isBlackInCheck = isInCheck && turn === "b";
+  const isBlackInCheck = Boolean(isInCheck && turn === "b");
 
   return (
-    <div style={{ width: "100%" }}>
-      {/* Game Status Bar */}
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 500,
-          margin: "0 auto",
-          padding: "8px 16px 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        {/* Game Over Status */}
-        {status !== "playing" ? (
-          <div
-            style={{
-              background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
-              color: "#1f2937",
-              padding: "6px 16px",
-              borderRadius: 20,
-              fontSize: 13,
-              fontWeight: 900,
-              textTransform: "uppercase",
-              boxShadow: "0 4px 15px rgba(251, 191, 36, 0.4)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <Crown size={16} />
-            {status === "checkmate" || status === "timeout"
-              ? `${winner === "w" ? "White" : "Black"} Wins!`
-              : status.toUpperCase()}
-          </div>
-        ) : (
-          <div
-            style={{
-              color: "#9ca3af",
-              fontSize: 11,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-            }}
-          >
-            Elixir Chess
-          </div>
-        )}
+    <div className="w-full">
+      {/* Game Header Bar */}
+      <div className="w-full bg-gradient-to-b from-[#0f0f1a] via-[#1a1a2e] to-transparent">
+        <div className="max-w-[420px] mx-auto px-3 py-2 flex items-center justify-between">
+          {/* Game Title / Status */}
+          {status !== "playing" ? (
+            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 px-4 py-2 rounded-xl shadow-[0_4px_15px_rgba(245,158,11,0.5)]">
+              <CrownIcon size={22} />
+              <span className="text-gray-900 font-black text-sm uppercase drop-shadow-sm">
+                {status === "checkmate" || status === "timeout"
+                  ? `${winner === "w" ? "White" : "Black"} Wins!`
+                  : status.toUpperCase()}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-[#e879f9] font-black text-xl game-title drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                ⚔️ Elixir Chess
+              </span>
+            </div>
+          )}
 
-        {/* Restart Button */}
-        <button
-          onClick={onRestart}
-          style={{
-            background: "linear-gradient(135deg, #4b5563, #374151)",
-            border: "2px solid #6b7280",
-            borderRadius: 8,
-            padding: 6,
-            color: "#d1d5db",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "all 0.2s ease",
-          }}
-          title="Restart Game"
-        >
-          <RotateCcw size={16} />
-        </button>
+          {/* Restart Button */}
+          <button
+            onClick={onRestart}
+            className="bg-gradient-to-br from-[#3d3d5c] to-[#2d2d4a] border-2 border-[#5a5a7a] rounded-xl p-2.5 text-gray-300 transition-all hover:border-[#c026d3] hover:text-white hover:shadow-[0_0_15px_rgba(192,38,211,0.4)] active:scale-95"
+            title="Restart Game"
+          >
+            <RotateCcw size={20} />
+          </button>
+        </div>
       </div>
 
-      {/* Black Player Elixir Bar (always top) */}
-      <ElixirBar
-        elixir={blackElixir}
-        timer={blackTimer}
+      {/* Black Player Panel */}
+      <PlayerPanel
         color="b"
+        timer={blackTimer}
+        elixir={blackElixir}
         isCurrentTurn={isBlackTurn}
         isInCheck={isBlackInCheck}
         position="top"
@@ -444,7 +451,7 @@ export const TopHUD: React.FC<TopHUDProps> = ({
 };
 
 // ============================================
-// Bottom HUD (Player Elixir)
+// Bottom HUD (White Player)
 // ============================================
 
 interface BottomHUDProps {
@@ -461,17 +468,16 @@ export const BottomHUD: React.FC<BottomHUDProps> = ({
   elixirGain,
 }) => {
   const { elixir, turn } = gameState;
-  // Bottom always shows white's elixir (fixed position)
   const whiteElixir = elixir.w;
   const whiteTimer = timers.w;
   const isWhiteTurn = turn === "w";
-  const isWhiteInCheck = isInCheck && turn === "w";
+  const isWhiteInCheck = Boolean(isInCheck && turn === "w");
 
   return (
-    <ElixirBar
-      elixir={whiteElixir}
-      timer={whiteTimer}
+    <PlayerPanel
       color="w"
+      timer={whiteTimer}
+      elixir={whiteElixir}
       isCurrentTurn={isWhiteTurn}
       isInCheck={isWhiteInCheck}
       position="bottom"

@@ -1,5 +1,6 @@
 import React from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { clsx } from "clsx";
 
 interface SquareProps {
   id: string;
@@ -25,115 +26,44 @@ export const Square = ({
     data: { square: id },
   });
 
-  // Dark mode colors
-  const lightColor = "#4a5568";
-  const darkColor = "#2d3748";
-  const selectedLight = "#805ad5";
-  const selectedDark = "#6b46c1";
-  const checkColor = "#e53e3e";
-
-  let bgColor = isBlack ? darkColor : lightColor;
-  if (isSelected) {
-    bgColor = isBlack ? selectedDark : selectedLight;
-  }
-  if (isKingInCheck) {
-    bgColor = checkColor;
-  }
-
   const hasCapture = isValidDrop && children;
   const hasMove = isValidDrop && !children;
+
+  // Determine background color class
+  const bgColorClass = isKingInCheck
+    ? "bg-red-600"
+    : isSelected
+      ? isBlack
+        ? "bg-purple-700"
+        : "bg-purple-500"
+      : isBlack
+        ? "bg-gray-700"
+        : "bg-gray-600";
 
   return (
     <div
       ref={setNodeRef}
       data-testid={`square-${id}`}
       onClick={onClick}
-      style={{
-        backgroundColor: bgColor,
-        position: "relative",
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        boxShadow: isKingInCheck
-          ? "inset 0 0 15px rgba(255, 0, 0, 0.8)"
-          : isOver
-            ? "inset 0 0 0 4px #fbbf24"
-            : undefined,
-      }}
+      className={clsx(
+        "relative w-full h-full flex items-center justify-center cursor-pointer",
+        bgColorClass,
+        isKingInCheck && "shadow-[inset_0_0_15px_rgba(255,0,0,0.8)]",
+        isOver && "shadow-[inset_0_0_0_4px_#fbbf24]",
+      )}
     >
       {/* Valid move indicator - dot for empty squares */}
       {hasMove && (
-        <div
-          style={{
-            position: "absolute",
-            width: "32%",
-            height: "32%",
-            backgroundColor: "rgba(0, 0, 0, 0.25)",
-            borderRadius: "50%",
-            pointerEvents: "none",
-            zIndex: 1,
-          }}
-        />
+        <div className="absolute w-[32%] h-[32%] bg-black/25 rounded-full pointer-events-none z-[1]" />
       )}
 
       {/* Valid capture indicator - corner triangles */}
       {hasCapture && (
         <>
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: 0,
-              height: 0,
-              borderTop: "12px solid rgba(239, 68, 68, 0.9)",
-              borderRight: "12px solid transparent",
-              pointerEvents: "none",
-              zIndex: 10,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              width: 0,
-              height: 0,
-              borderTop: "12px solid rgba(239, 68, 68, 0.9)",
-              borderLeft: "12px solid transparent",
-              pointerEvents: "none",
-              zIndex: 10,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              width: 0,
-              height: 0,
-              borderBottom: "12px solid rgba(239, 68, 68, 0.9)",
-              borderRight: "12px solid transparent",
-              pointerEvents: "none",
-              zIndex: 10,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              bottom: 0,
-              right: 0,
-              width: 0,
-              height: 0,
-              borderBottom: "12px solid rgba(239, 68, 68, 0.9)",
-              borderLeft: "12px solid transparent",
-              pointerEvents: "none",
-              zIndex: 10,
-            }}
-          />
+          <div className="absolute top-0 left-0 w-0 h-0 border-t-[12px] border-t-red-500/90 border-r-[12px] border-r-transparent pointer-events-none z-10" />
+          <div className="absolute top-0 right-0 w-0 h-0 border-t-[12px] border-t-red-500/90 border-l-[12px] border-l-transparent pointer-events-none z-10" />
+          <div className="absolute bottom-0 left-0 w-0 h-0 border-b-[12px] border-b-red-500/90 border-r-[12px] border-r-transparent pointer-events-none z-10" />
+          <div className="absolute bottom-0 right-0 w-0 h-0 border-b-[12px] border-b-red-500/90 border-l-[12px] border-l-transparent pointer-events-none z-10" />
         </>
       )}
 

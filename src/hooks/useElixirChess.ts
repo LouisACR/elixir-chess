@@ -1,31 +1,30 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "chess.js";
-import type { GameState, PlayerColor, PieceType } from "../types/game";
+import type {
+  GameState,
+  PlayerColor,
+  PieceType,
+  ElixirGainEvent,
+} from "@elixir-chess/shared";
 import {
   INITIAL_FEN,
   STARTING_ELIXIR,
   PIECE_COSTS,
   INITIAL_TIME,
-} from "../constants/game";
-import { initializeHand, cycleCard } from "../utils/cards";
+  initializeHand,
+  cycleCard,
+  addElixir,
+} from "@elixir-chess/shared";
 import {
   isInPlacementZone,
   canBlockCheckByPlacing,
   canPlaceAnyPiece,
   switchTurnInFen,
 } from "../utils/chess";
-import { addElixir } from "../utils/elixir";
 
-// ============================================
-// Types
-// ============================================
-
-export interface ElixirGainEvent {
-  player: PlayerColor;
-  amount: number;
-  timestamp: number;
-}
+// Re-export for backward compatibility
+export type { ElixirGainEvent };
 
 // ============================================
 // Initial State Factory
@@ -116,86 +115,6 @@ export function useElixirChess() {
   // Game State Updates
   // ----------------------------------------
 
-  const updateGameState = useCallback(() => {
-    const game = chessRef.current;
-
-    let status: GameState["status"] = "playing";
-    let winner: PlayerColor | undefined;
-
-    const isCheckmateByMoves = game.isCheckmate();
-
-    if (isCheckmateByMoves) {
-      // Custom checkmate check: account for blocking with placed pieces
-      setGameState((prev) => {
-        const currentTurn = game.turn();
-        const currentElixir = prev.elixir[currentTurn];
-        const currentHand = prev.hands[currentTurn].cards;
-
-        if (!canBlockCheckByPlacing(game, currentHand, currentElixir)) {
-          status = "checkmate";
-          winner = currentTurn === "w" ? "b" : "w";
-        }
-
-        return {
-          ...prev,
-          fen: game.fen(),
-          turn: game.turn(),
-          status,
-          winner,
-          history: game.history(),
-        };
-      });
-
-      setSelectedSquare(null);
-      setValidMoves([]);
-      return;
-    }
-
-    if (game.isStalemate()) {
-      // Custom stalemate check: account for piece placement
-      setGameState((prev) => {
-        const currentTurn = game.turn();
-        const currentElixir = prev.elixir[currentTurn];
-        const currentHand = prev.hands[currentTurn].cards;
-
-        if (!canPlaceAnyPiece(game, currentHand, currentElixir)) {
-          status = "stalemate";
-        }
-
-        return {
-          ...prev,
-          fen: game.fen(),
-          turn: game.turn(),
-          status,
-          winner,
-          history: game.history(),
-        };
-      });
-
-      setSelectedSquare(null);
-      setValidMoves([]);
-      return;
-    }
-
-    if (game.isDraw()) {
-      status = "draw";
-    } else if (game.isInsufficientMaterial()) {
-      status = "insufficient";
-    }
-
-    setSelectedSquare(null);
-    setValidMoves([]);
-
-    setGameState((prev) => ({
-      ...prev,
-      fen: game.fen(),
-      turn: game.turn(),
-      status,
-      winner,
-      history: game.history(),
-    }));
-  }, []);
-
   // ----------------------------------------
   // Game Actions
   // ----------------------------------------
@@ -259,7 +178,45 @@ export function useElixirChess() {
       const originalFen = game.fen();
 
       try {
-        const success = game.put({ type, color: turn }, square);
+        // chess.js doesn't allow pawns on rank 1 or 8, so we handle this
+        // by placing a queen temporarily and then modifying the FEN
+        const rank = parseInt(square[1]);
+        const isPawnOnBackRank = type === "p" && (rank === 1 || rank === 8);
+
+        let success: boolean;
+        if (isPawnOnBackRank) {
+          // Place the pawn by directly manipulating the FEN
+          const currentFen = game.fen();
+          const [position, ...rest] = currentFen.split(" ");
+          const rows = position.split("/");
+          const rankIndex = 8 - rank; // FEN rows are from rank 8 to 1
+          const file = square.charCodeAt(0) - 97; // 'a' = 0, 'b' = 1, etc.
+
+          // Expand the row to 8 characters (replace numbers with dots)
+          let expandedRow = rows[rankIndex].replace(/[1-8]/g, (m) =>
+            ".".repeat(parseInt(m)),
+          );
+
+          // Place the pawn
+          const pieceChar = turn === "w" ? "P" : "p";
+          expandedRow =
+            expandedRow.substring(0, file) +
+            pieceChar +
+            expandedRow.substring(file + 1);
+
+          // Compress back (replace consecutive dots with numbers)
+          const compressedRow = expandedRow.replace(/\.+/g, (m) =>
+            m.length.toString(),
+          );
+          rows[rankIndex] = compressedRow;
+
+          const newFen = [rows.join("/"), ...rest].join(" ");
+          game.load(newFen);
+          success = true;
+        } else {
+          success = game.put({ type, color: turn }, square);
+        }
+
         if (!success) return false;
 
         // Verify no self-check

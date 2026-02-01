@@ -1,0 +1,293 @@
+import { useState, useMemo, useCallback } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  useSensor,
+  useSensors,
+  MouseSensor,
+  TouchSensor,
+} from "@dnd-kit/core";
+import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
+import type { Square } from "chess.js";
+
+import { useMultiplayerGame } from "../hooks/useMultiplayerGame";
+import { Board } from "./Board";
+import { Shop } from "./Shop";
+import { TopHUD, BottomHUD } from "./GameHUD";
+import { PieceIcon } from "./PieceIcons";
+import { LobbyScreen } from "./Lobby";
+import { getValidPlacementSquares } from "../utils/chess";
+import type { DragData, PieceType, CardHand } from "@elixir-chess/shared";
+
+// ============================================
+// Drag & Drop Configuration
+// ============================================
+
+const MOUSE_SENSOR_CONFIG = {
+  activationConstraint: { distance: 5 },
+};
+
+const TOUCH_SENSOR_CONFIG = {
+  activationConstraint: { delay: 100, tolerance: 5 },
+};
+
+const DROP_ANIMATION = {
+  duration: 200,
+  easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+};
+
+// ============================================
+// Drag Preview
+// ============================================
+
+const DragPreview: React.FC<{ type: PieceType; color: "w" | "b" }> = ({
+  type,
+  color,
+}) => (
+  <div className="w-14 h-14 drop-shadow-[0_8px_16px_rgba(0,0,0,0.5)]">
+    <PieceIcon type={type} color={color} className="w-full h-full" />
+  </div>
+);
+
+// ============================================
+// Multiplayer Game Component
+// ============================================
+
+interface MultiplayerGameProps {
+  onBack: () => void;
+}
+
+export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
+  const {
+    connectionStatus,
+    connect,
+    disconnect,
+    error,
+    roomId,
+    playerColor,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    gameState,
+    chess,
+    isMyTurn,
+    isInCheck,
+    lastElixirGain,
+    selectedSquare,
+    validMoves,
+    selectSquare,
+    placePiece,
+    makeMove,
+    restartGame,
+  } = useMultiplayerGame();
+
+  const [activeDragData, setActiveDragData] = useState<DragData | null>(null);
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, MOUSE_SENSOR_CONFIG),
+    useSensor(TouchSensor, TOUCH_SENSOR_CONFIG),
+  );
+
+  // Convert multiplayer state to local-compatible GameState for HUD components
+  const hudGameState = useMemo(
+    () => ({
+      fen: gameState.fen,
+      turn: gameState.turn,
+      elixir: gameState.elixir,
+      hands: {
+        w:
+          playerColor === "w"
+            ? gameState.myHand
+            : { cards: [], nextCard: "p" as PieceType, deck: [] },
+        b:
+          playerColor === "b"
+            ? gameState.myHand
+            : { cards: [], nextCard: "p" as PieceType, deck: [] },
+      } as Record<"w" | "b", CardHand>,
+      timers: gameState.timers,
+      status: gameState.status,
+      winner: gameState.winner,
+      history: gameState.history,
+    }),
+    [gameState, playerColor],
+  );
+
+  const dragValidMoves = useMemo(() => {
+    if (!activeDragData || !isMyTurn) return [];
+
+    if (activeDragData.source === "shop") {
+      return getValidPlacementSquares(chess, activeDragData.type);
+    }
+
+    if (activeDragData.source === "board" && activeDragData.from) {
+      const moves = chess.moves({
+        square: activeDragData.from as Square,
+        verbose: true,
+      });
+      return moves.map((m) => m.to);
+    }
+
+    return [];
+  }, [activeDragData, chess, isMyTurn]);
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      if (!isMyTurn) return;
+      if (event.active.data.current) {
+        setActiveDragData(event.active.data.current as DragData);
+        selectSquare(null);
+      }
+    },
+    [selectSquare, isMyTurn],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveDragData(null);
+
+      if (!isMyTurn) return;
+      if (!over || !active.data.current) return;
+
+      const dragData = active.data.current as DragData;
+      const targetSquare = over.data.current?.square as Square | undefined;
+
+      if (!targetSquare) return;
+
+      if (dragData.source === "shop") {
+        placePiece(dragData.type, targetSquare);
+      } else if (dragData.source === "board" && dragData.from) {
+        makeMove(dragData.from as Square, targetSquare);
+      }
+    },
+    [placePiece, makeMove, isMyTurn],
+  );
+
+  const handleSquareClick = useCallback(
+    (square: string) => {
+      if (!isMyTurn) return;
+
+      const piece = chess.get(square as Square);
+
+      if (selectedSquare && validMoves.includes(square)) {
+        makeMove(selectedSquare as Square, square as Square);
+        return;
+      }
+
+      if (piece && piece.color === playerColor) {
+        if (selectedSquare === square) {
+          selectSquare(null);
+        } else {
+          selectSquare(square);
+        }
+      } else {
+        selectSquare(null);
+      }
+    },
+    [
+      chess,
+      selectedSquare,
+      validMoves,
+      makeMove,
+      selectSquare,
+      playerColor,
+      isMyTurn,
+    ],
+  );
+
+  const handleBack = useCallback(() => {
+    leaveRoom();
+    disconnect();
+    onBack();
+  }, [leaveRoom, disconnect, onBack]);
+
+  // Show lobby if not in game
+  if (gameState.status === "waiting" || !roomId) {
+    return (
+      <LobbyScreen
+        connectionStatus={connectionStatus}
+        roomId={roomId}
+        playerColor={playerColor}
+        error={error}
+        onConnect={connect}
+        onCreateRoom={createRoom}
+        onJoinRoom={joinRoom}
+        onBack={handleBack}
+      />
+    );
+  }
+
+  const myElixir = playerColor ? gameState.elixir[playerColor] : 0;
+  const displayedValidMoves = activeDragData ? dragValidMoves : validMoves;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="game-bg h-full w-full flex flex-col overflow-hidden">
+        {/* Back button */}
+        <button
+          onClick={handleBack}
+          className="absolute top-2 left-2 z-10 px-3 py-1 bg-black/30 hover:bg-black/50 rounded text-white/70 hover:text-white text-sm transition-colors"
+        >
+          ← Leave
+        </button>
+
+        {/* Room code and turn indicator */}
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+          {!isMyTurn && gameState.status === "playing" && (
+            <div className="px-3 py-1 bg-amber-600/80 rounded text-white text-sm font-bold animate-pulse">
+              Waiting...
+            </div>
+          )}
+          <div className="px-3 py-1 bg-black/30 rounded text-white/70 text-sm font-mono">
+            Room: {roomId}
+          </div>
+        </div>
+
+        <TopHUD
+          gameState={hudGameState}
+          timers={gameState.timers}
+          onRestart={restartGame}
+          isInCheck={isInCheck}
+          elixirGain={lastElixirGain}
+        />
+
+        <div className="flex-1 flex items-center justify-center p-2 min-h-0">
+          <Board
+            game={chess}
+            selectedSquare={selectedSquare}
+            validMoves={displayedValidMoves}
+            onSquareClick={handleSquareClick}
+            flipped={playerColor === "b"}
+          />
+        </div>
+
+        <BottomHUD
+          gameState={hudGameState}
+          timers={gameState.timers}
+          isInCheck={isInCheck}
+          elixirGain={lastElixirGain}
+        />
+
+        {/* Only show own hand in multiplayer */}
+        <Shop
+          turn={playerColor || "w"}
+          elixir={myElixir}
+          hand={gameState.myHand}
+        />
+
+        <DragOverlay dropAnimation={DROP_ANIMATION}>
+          {activeDragData && (
+            <DragPreview
+              type={activeDragData.type}
+              color={activeDragData.color}
+            />
+          )}
+        </DragOverlay>
+      </div>
+    </DndContext>
+  );
+}

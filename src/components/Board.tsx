@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Square } from "./Square";
 import { Piece } from "./Piece";
 import { Chess } from "chess.js";
@@ -8,6 +8,7 @@ interface BoardProps {
   selectedSquare?: string | null;
   validMoves?: string[];
   onSquareClick?: (square: string) => void;
+  flipped?: boolean;
 }
 
 export const Board: React.FC<BoardProps> = ({
@@ -15,6 +16,7 @@ export const Board: React.FC<BoardProps> = ({
   selectedSquare,
   validMoves = [],
   onSquareClick,
+  flipped = false,
 }) => {
   const board = game.board();
   const turn = game.turn();
@@ -32,25 +34,26 @@ export const Board: React.FC<BoardProps> = ({
     });
   }
 
+  // Create flipped board view if needed
+  const displayBoard = useMemo(() => {
+    if (!flipped) return board;
+    return [...board].reverse().map((row) => [...row].reverse());
+  }, [board, flipped]);
+
   return (
-    <div
-      style={{
-        width: "min(88vw, 380px)",
-        aspectRatio: "1",
-        display: "grid",
-        gridTemplateColumns: "repeat(8, 1fr)",
-        gridTemplateRows: "repeat(8, 1fr)",
-        borderRadius: 8,
-        overflow: "hidden",
-        boxShadow:
-          "0 0 0 3px #4a5568, 0 0 0 6px #1a202c, 0 0 30px rgba(124, 58, 237, 0.3), 0 10px 40px rgba(0,0,0,0.6)",
-        touchAction: "none",
-      }}
-    >
-      {board.map((row, rowIndex) =>
+    <div className="w-[min(88vw,380px)] aspect-square grid grid-cols-8 grid-rows-8 rounded-lg overflow-hidden touch-none shadow-[0_0_0_3px_#4a5568,0_0_0_6px_#1a202c,0_0_30px_rgba(124,58,237,0.3),0_10px_40px_rgba(0,0,0,0.6)]">
+      {displayBoard.map((row, rowIndex) =>
         row.map((piece, colIndex) => {
-          const isBlack = (rowIndex + colIndex) % 2 === 1;
-          const squareId = `${String.fromCharCode(97 + colIndex)}${8 - rowIndex}`;
+          // Calculate actual square ID (accounting for flip)
+          const actualRow = flipped ? rowIndex : 7 - rowIndex;
+          const actualCol = flipped ? 7 - colIndex : colIndex;
+          const squareId = `${String.fromCharCode(97 + actualCol)}${actualRow + 1}`;
+
+          // Visual coloring based on display position
+          const displayRow = flipped ? 7 - rowIndex : rowIndex;
+          const displayCol = flipped ? 7 - colIndex : colIndex;
+          const isBlack = (displayRow + displayCol) % 2 === 1;
+
           const isSelected = selectedSquare === squareId;
           const isValidMove = validMoves.includes(squareId);
           const isKingInCheck = kingInCheckSquare === squareId;

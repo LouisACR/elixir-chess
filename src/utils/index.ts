@@ -1,7 +1,12 @@
-// Card utilities
-export { drawCard, generateDeck, initializeHand, cycleCard } from "./cards";
+// Card utilities - re-exported from shared
+export {
+  drawCard,
+  generateDeck,
+  initializeHand,
+  cycleCard,
+} from "@elixir-chess/shared";
 
-// Chess utilities
+// Chess utilities (use chess.js at runtime, so client-only)
 export {
   isInPlacementZone,
   getPlacementZoneSquares,
@@ -12,5 +17,5 @@ export {
   switchTurnInFen,
 } from "./chess";
 
-// Elixir utilities
-export { deductElixir, canAfford, addElixir } from "./elixir";
+// Elixir utilities - re-exported from shared
+export { deductElixir, canAfford, addElixir } from "@elixir-chess/shared";
