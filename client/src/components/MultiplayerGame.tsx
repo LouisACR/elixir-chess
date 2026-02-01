@@ -78,7 +78,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
     selectSquare,
     premoves,
     premoveValidMoves,
-    ghostPieces,
+    premoveVisuals,
     cancelPremoves,
     placePiece,
     makeMove,
@@ -259,7 +259,8 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
             flipped={playerColor === "b"}
             premoves={premoves}
             premoveValidMoves={premoveValidMoves}
-            ghostPieces={ghostPieces}
+            ghostPieces={premoveVisuals.ghostPieces}
+            hiddenSquares={premoveVisuals.hiddenSquares}
           />
         </div>
 

@@ -143,6 +143,97 @@ function getPremoveTargets(
   return Array.from(targets);
 }
 
+// Helper to get premove targets from a virtual position (for chaining premoves)
+// pieceType: the type of piece at the virtual position
+// virtualSquare: where the piece is "virtually" located after previous premoves
+function getPremoveTargetsFromVirtual(
+  pieceType: PieceType,
+  virtualSquare: string,
+  playerColor: PlayerColor,
+): string[] {
+  const file = virtualSquare.charCodeAt(0) - 97; // 0-7
+  const rank = parseInt(virtualSquare[1]) - 1; // 0-7
+  const targets: Set<string> = new Set();
+
+  const addIfValid = (f: number, r: number) => {
+    if (f >= 0 && f <= 7 && r >= 0 && r <= 7) {
+      const sq = String.fromCharCode(97 + f) + (r + 1);
+      targets.add(sq);
+    }
+  };
+
+  switch (pieceType) {
+    case "p": {
+      const dir = playerColor === "w" ? 1 : -1;
+      addIfValid(file, rank + dir);
+      // Note: Double move only from starting rank, but for premove we're lenient
+      addIfValid(file, rank + 2 * dir);
+      addIfValid(file - 1, rank + dir);
+      addIfValid(file + 1, rank + dir);
+      break;
+    }
+    case "n": {
+      const knightMoves = [
+        [-2, -1],
+        [-2, 1],
+        [-1, -2],
+        [-1, 2],
+        [1, -2],
+        [1, 2],
+        [2, -1],
+        [2, 1],
+      ];
+      for (const [df, dr] of knightMoves) {
+        addIfValid(file + df, rank + dr);
+      }
+      break;
+    }
+    case "b": {
+      for (let i = 1; i <= 7; i++) {
+        addIfValid(file + i, rank + i);
+        addIfValid(file + i, rank - i);
+        addIfValid(file - i, rank + i);
+        addIfValid(file - i, rank - i);
+      }
+      break;
+    }
+    case "r": {
+      for (let i = 1; i <= 7; i++) {
+        addIfValid(file + i, rank);
+        addIfValid(file - i, rank);
+        addIfValid(file, rank + i);
+        addIfValid(file, rank - i);
+      }
+      break;
+    }
+    case "q": {
+      for (let i = 1; i <= 7; i++) {
+        addIfValid(file + i, rank);
+        addIfValid(file - i, rank);
+        addIfValid(file, rank + i);
+        addIfValid(file, rank - i);
+        addIfValid(file + i, rank + i);
+        addIfValid(file + i, rank - i);
+        addIfValid(file - i, rank + i);
+        addIfValid(file - i, rank - i);
+      }
+      break;
+    }
+    case "k": {
+      for (let df = -1; df <= 1; df++) {
+        for (let dr = -1; dr <= 1; dr++) {
+          if (df !== 0 || dr !== 0) {
+            addIfValid(file + df, rank + dr);
+          }
+        }
+      }
+      break;
+    }
+  }
+
+  return Array.from(targets);
+}
+
 export interface MultiplayerGameState {
   fen: string;
   turn: PlayerColor;
@@ -226,53 +317,111 @@ export function useMultiplayerGame() {
     }
   }, [gameState.fen]);
 
-  // Compute ghost pieces from premoves
-  // This simulates the board state after all premoves are applied
-  const ghostPieces = useMemo((): GhostPiece[] => {
-    if (!playerColor || gameState.premoves.length === 0) return [];
+  // Compute the virtual board state after applying premoves locally
+  // This returns which pieces should be hidden and which ghost pieces to show
+  const premoveVisuals = useMemo(() => {
+    if (!playerColor || gameState.premoves.length === 0) {
+      return {
+        hiddenSquares: new Set<string>(),
+        ghostPieces: [] as GhostPiece[],
+      };
+    }
 
-    const ghosts: GhostPiece[] = [];
-    const tempChess = new Chess(gameState.fen);
+    // Track piece movements through the premove chain
+    // Key: original square, Value: current virtual position after premoves
+    const piecePositions = new Map<string, string>();
 
-    // Track which squares have been "vacated" by premoves
-    const vacatedSquares = new Set<string>();
+    // Initialize with all pieces at their actual positions
+    const board = chessRef.current.board();
+    board.forEach((row, rowIndex) => {
+      row.forEach((piece, colIndex) => {
+        if (piece && piece.color === playerColor) {
+          const square = `${String.fromCharCode(97 + colIndex)}${8 - rowIndex}`;
+          piecePositions.set(square, square);
+        }
+      });
+    });
 
+    // Apply each premove to track where pieces end up
     for (const premove of gameState.premoves) {
-      const piece = tempChess.get(premove.from as Square);
-      if (piece && piece.color === playerColor) {
-        // Try to simulate the move
-        try {
-          tempChess.move({
-            from: premove.from as Square,
-            to: premove.to as Square,
-            promotion: "q",
-          });
-          vacatedSquares.add(premove.from);
-        } catch {
-          // If move fails in simulation, still show ghost at destination
-          // The server will validate and clear if invalid
+      // Find which original piece is currently at the "from" position (virtually)
+      let originalSquare: string | null = null;
+      for (const [orig, current] of piecePositions.entries()) {
+        if (current === premove.from) {
+          originalSquare = orig;
+          break;
+        }
+      }
+
+      if (originalSquare) {
+        // Move the piece virtually
+        piecePositions.set(originalSquare, premove.to);
+      }
+    }
+
+    // Determine which squares should hide their actual piece (piece has moved away)
+    const hiddenSquares = new Set<string>();
+    const ghosts: GhostPiece[] = [];
+
+    for (const [originalSquare, virtualSquare] of piecePositions.entries()) {
+      if (originalSquare !== virtualSquare) {
+        // Piece has moved - hide it at original position
+        hiddenSquares.add(originalSquare);
+
+        // Show ghost at virtual position
+        const piece = chessRef.current.get(originalSquare as Square);
+        if (piece) {
           ghosts.push({
-            square: premove.to,
+            square: virtualSquare,
             piece: { type: piece.type, color: piece.color },
           });
-          vacatedSquares.add(premove.from);
         }
       }
     }
 
-    // Add ghosts for the final positions after all premoves
-    for (const premove of gameState.premoves) {
-      const originalPiece = chessRef.current.get(premove.from as Square);
-      if (originalPiece && originalPiece.color === playerColor) {
-        ghosts.push({
-          square: premove.to,
-          piece: { type: originalPiece.type, color: originalPiece.color },
-        });
-      }
-    }
-
-    return ghosts;
+    return { hiddenSquares, ghostPieces: ghosts };
   }, [gameState.fen, gameState.premoves, playerColor]);
+
+  // Get the virtual position of a piece (after premoves)
+  const getVirtualPosition = useCallback(
+    (originalSquare: string): string => {
+      if (!playerColor || gameState.premoves.length === 0)
+        return originalSquare;
+
+      let currentPos = originalSquare;
+      for (const premove of gameState.premoves) {
+        if (premove.from === currentPos) {
+          currentPos = premove.to;
+        }
+      }
+      return currentPos;
+    },
+    [gameState.premoves, playerColor],
+  );
+
+  // Find which original square a piece came from (for a virtual position)
+  const getOriginalSquare = useCallback(
+    (virtualSquare: string): string | null => {
+      if (!playerColor || gameState.premoves.length === 0) return virtualSquare;
+
+      // Check if this is a premove destination
+      for (let i = gameState.premoves.length - 1; i >= 0; i--) {
+        if (gameState.premoves[i].to === virtualSquare) {
+          // Trace back to find original
+          let pos = gameState.premoves[i].from;
+          for (let j = i - 1; j >= 0; j--) {
+            if (gameState.premoves[j].to === pos) {
+              pos = gameState.premoves[j].from;
+            }
+          }
+          return pos;
+        }
+      }
+
+      return virtualSquare;
+    },
+    [gameState.premoves, playerColor],
+  );
 
   // ============================================
   // Socket Event Handlers
@@ -605,12 +754,6 @@ export function useMultiplayerGame() {
       const piece = chessRef.current.get(square as Square);
       const isOwnPiece = piece && piece.color === playerColor;
 
-      // Also check if there's a "ghost" piece here (from premove)
-      const lastPremoveToHere = gameState.premoves.find(
-        (pm) => pm.to === square,
-      );
-      const hasGhostPiece = lastPremoveToHere !== undefined;
-
       // === DURING MY TURN ===
       if (isMyTurnNow) {
         // If we have a selected square and click a valid move target, make the move
@@ -645,7 +788,7 @@ export function useMultiplayerGame() {
       else {
         // If we have a piece selected for premove and click a valid premove target
         if (selectedSquare && premoveValidMoves.includes(square)) {
-          // Add the premove
+          // Add the premove (from the virtual position, which is selectedSquare)
           addPremove(selectedSquare, square);
           setSelectedSquare(null);
           setValidMoves([]);
@@ -653,42 +796,47 @@ export function useMultiplayerGame() {
           return;
         }
 
-        // Check if clicking on a ghost piece (piece at premove destination)
-        if (hasGhostPiece) {
-          // Select the ghost piece for chaining premoves
-          const originalFrom = lastPremoveToHere.from;
-          const originalPiece = chessRef.current.get(originalFrom as Square);
+        // Check if this square has a ghost piece (piece virtually moved here via premove)
+        const isGhostSquare = premoveVisuals.ghostPieces.some(
+          (g) => g.square === square,
+        );
 
-          if (originalPiece && originalPiece.color === playerColor) {
-            if (selectedSquare === square) {
-              setSelectedSquare(null);
-              setValidMoves([]);
-              setPremoveValidMoves([]);
-            } else {
-              setSelectedSquare(square);
-              setValidMoves([]);
-              // Show premove targets from this ghost position
-              const targets = getPremoveTargets(
-                chessRef.current,
-                originalFrom as Square,
-                playerColor,
-              );
-              // Filter out the current position since piece is "moving" from ghost pos
-              setPremoveValidMoves(targets.filter((t) => t !== square));
+        if (isGhostSquare) {
+          // Select the ghost piece for chaining premoves
+          // Find the original piece that ended up here
+          const originalSquare = getOriginalSquare(square);
+          if (originalSquare) {
+            const originalPiece = chessRef.current.get(
+              originalSquare as Square,
+            );
+
+            if (originalPiece && originalPiece.color === playerColor) {
+              if (selectedSquare === square) {
+                setSelectedSquare(null);
+                setValidMoves([]);
+                setPremoveValidMoves([]);
+              } else {
+                setSelectedSquare(square); // Select the virtual position
+                setValidMoves([]);
+                // Show premove targets - use the piece type to calculate targets from the virtual position
+                const targets = getPremoveTargetsFromVirtual(
+                  originalPiece.type,
+                  square,
+                  playerColor,
+                );
+                setPremoveValidMoves(targets);
+              }
+              return;
             }
-            return;
           }
         }
 
-        // Click on own piece: select it for premove
+        // Click on own piece at its actual position (not yet premoved)
         if (isOwnPiece) {
-          // Check if this piece hasn't already been premoved away
-          const isPremoved = gameState.premoves.some(
-            (pm) => pm.from === square,
-          );
-
-          if (isPremoved) {
-            // Piece already has premove, can't select original position
+          // Check if this piece has already been premoved away
+          const virtualPos = getVirtualPosition(square);
+          if (virtualPos !== square) {
+            // Piece has been premoved, can't select at original position
             setSelectedSquare(null);
             setValidMoves([]);
             setPremoveValidMoves([]);
@@ -723,12 +871,15 @@ export function useMultiplayerGame() {
       selectedSquare,
       validMoves,
       premoveValidMoves,
+      premoveVisuals,
       playerColor,
       gameState.turn,
       gameState.status,
       gameState.premoves,
       makeMove,
       addPremove,
+      getVirtualPosition,
+      getOriginalSquare,
     ],
   );
 
@@ -768,7 +919,7 @@ export function useMultiplayerGame() {
     // Premove
     premoves: gameState.premoves,
     premoveValidMoves,
-    ghostPieces,
+    premoveVisuals,
     cancelPremoves,
 
     // Actions

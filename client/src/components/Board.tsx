@@ -11,6 +11,7 @@ interface BoardProps {
   premoveValidMoves?: string[];
   premoves?: Premove[];
   ghostPieces?: GhostPiece[];
+  hiddenSquares?: Set<string>;
   onSquareClick?: (square: string) => void;
   flipped?: boolean;
   allowPremoveDrag?: boolean;
@@ -23,6 +24,7 @@ export const Board: React.FC<BoardProps> = ({
   premoveValidMoves = [],
   premoves = [],
   ghostPieces = [],
+  hiddenSquares = new Set(),
   onSquareClick,
   flipped = false,
   allowPremoveDrag = false,
@@ -86,8 +88,8 @@ export const Board: React.FC<BoardProps> = ({
           const isPremoveTo = premoveSquares.toSquares.has(squareId);
           const isPremoveValid = premoveValidMoves.includes(squareId);
 
-          // Check if piece has been premoved away (show as transparent)
-          const isPiecePremoved = isPremoveFrom && piece;
+          // Check if piece should be hidden (has been premoved away)
+          const isPieceHidden = hiddenSquares.has(squareId);
 
           // Check for ghost piece at this square
           const ghostPiece = ghostPieceMap.get(squareId);
@@ -110,17 +112,17 @@ export const Board: React.FC<BoardProps> = ({
               isPremoveValid={isPremoveValid}
               onClick={() => onSquareClick?.(squareId)}
             >
-              {/* Original piece (transparent if premoved) */}
-              {piece && (
+              {/* Original piece (hidden if premoved away) */}
+              {piece && !isPieceHidden && (
                 <Piece
                   piece={piece}
                   square={squareId}
-                  canDrag={canDrag && !isPiecePremoved}
-                  isGhost={!!isPiecePremoved}
+                  canDrag={canDrag}
+                  isGhost={false}
                 />
               )}
               {/* Ghost piece at premove destination */}
-              {ghostPiece && !piece && (
+              {ghostPiece && (
                 <Piece
                   piece={ghostPiece.piece}
                   square={squareId}
