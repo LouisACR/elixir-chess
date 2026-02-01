@@ -1,60 +1,27 @@
 import { useState, useCallback, useRef } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "chess.js";
+import type { GameState, PlayerColor, PieceType } from "../types/game";
 import {
-  PIECE_COSTS,
+  INITIAL_FEN,
   STARTING_ELIXIR,
   MAX_ELIXIR,
-  CARD_WEIGHTS,
-  HAND_SIZE,
-} from "../types/game";
-import type {
-  GameState,
-  PlayerColor,
-  PieceType,
-  CardHand,
-} from "../types/game";
+  PIECE_COSTS,
+} from "../constants/game";
+import { initializeHand, cycleCard } from "../utils/cards";
+import {
+  isInPlacementZone,
+  canBlockCheckByPlacing,
+  canPlaceAnyPiece,
+  switchTurnInFen,
+} from "../utils/chess";
 
-const INITIAL_FEN = "4k3/8/8/8/8/8/8/4K3 w - - 0 1"; // Kings only
+// ============================================
+// Initial State Factory
+// ============================================
 
-// Draw a random card based on weighted probabilities
-function drawCard(): PieceType {
-  const pieces = Object.keys(CARD_WEIGHTS) as Exclude<PieceType, "k">[];
-  const totalWeight = Object.values(CARD_WEIGHTS).reduce((a, b) => a + b, 0);
-  let random = Math.random() * totalWeight;
-
-  for (const piece of pieces) {
-    random -= CARD_WEIGHTS[piece];
-    if (random <= 0) return piece;
-  }
-  return "p"; // Fallback
-}
-
-// Generate a shuffled deck of cards based on weights
-function generateDeck(size: number = 20): PieceType[] {
-  const deck: PieceType[] = [];
-  for (let i = 0; i < size; i++) {
-    deck.push(drawCard());
-  }
-  return deck;
-}
-
-// Initialize a player's hand with 4 cards + next card preview
-function initializeHand(): CardHand {
-  const deck = generateDeck(20);
+function createInitialGameState(): GameState {
   return {
-    cards: [deck.pop()!, deck.pop()!, deck.pop()!, deck.pop()!],
-    nextCard: deck.pop()!,
-    deck,
-  };
-}
-
-export function useElixirChess() {
-  const chessRef = useRef(new Chess(INITIAL_FEN));
-  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
-  const [validMoves, setValidMoves] = useState<string[]>([]);
-
-  const [gameState, setGameState] = useState<GameState>({
     fen: INITIAL_FEN,
     turn: "w",
     elixir: { w: STARTING_ELIXIR, b: STARTING_ELIXIR },
@@ -64,108 +31,22 @@ export function useElixirChess() {
     },
     status: "playing",
     history: [],
-  });
+  };
+}
 
-  // Check if player can block check by placing any affordable piece from their HAND
-  const canBlockCheckByPlacing = useCallback(
-    (elixir: number, hand: PieceType[]): boolean => {
-      const game = chessRef.current;
-      const turn = game.turn();
+// ============================================
+// Hook
+// ============================================
 
-      if (!game.inCheck()) return false;
+export function useElixirChess() {
+  const chessRef = useRef(new Chess(INITIAL_FEN));
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  const [validMoves, setValidMoves] = useState<string[]>([]);
+  const [gameState, setGameState] = useState<GameState>(createInitialGameState);
 
-      const originalFen = game.fen();
-      // Only check pieces in hand that are affordable
-      const affordablePieces = hand.filter((p) => PIECE_COSTS[p] <= elixir);
-
-      if (affordablePieces.length === 0) return false;
-
-      // Try placing each affordable piece from hand on each empty square
-      for (const pieceType of affordablePieces) {
-        for (let col = 0; col < 8; col++) {
-          for (let row = 1; row <= 8; row++) {
-            const square = `${String.fromCharCode(97 + col)}${row}` as Square;
-
-            // Skip occupied squares
-            if (game.get(square)) continue;
-
-            try {
-              const success = game.put(
-                { type: pieceType, color: turn },
-                square,
-              );
-              if (success) {
-                const stillInCheck = game.inCheck();
-                game.load(originalFen);
-
-                if (!stillInCheck) {
-                  return true; // Found a way to block check
-                }
-              } else {
-                game.load(originalFen);
-              }
-            } catch {
-              game.load(originalFen);
-            }
-          }
-        }
-      }
-
-      return false;
-    },
-    [],
-  );
-
-  // Check if player can place any piece at all from their HAND (for stalemate check)
-  const canPlaceAnyPiece = useCallback(
-    (elixir: number, hand: PieceType[]): boolean => {
-      const game = chessRef.current;
-      const turn = game.turn();
-
-      const originalFen = game.fen();
-      // Only check pieces in hand that are affordable
-      const affordablePieces = hand.filter((p) => PIECE_COSTS[p] <= elixir);
-
-      if (affordablePieces.length === 0) return false;
-
-      // Try placing each affordable piece on valid zone squares
-      for (const pieceType of affordablePieces) {
-        for (let col = 0; col < 8; col++) {
-          // Check only placement zone (ranks 1-3 for white, 6-8 for black)
-          const ranks = turn === "w" ? [1, 2, 3] : [6, 7, 8];
-          for (const row of ranks) {
-            const square = `${String.fromCharCode(97 + col)}${row}` as Square;
-
-            // Skip occupied squares
-            if (game.get(square)) continue;
-
-            try {
-              const success = game.put(
-                { type: pieceType, color: turn },
-                square,
-              );
-              if (success) {
-                // Make sure placing doesn't put ourselves in check
-                const inCheck = game.inCheck();
-                game.load(originalFen);
-
-                if (!inCheck) {
-                  return true; // Found a valid placement
-                }
-              } else {
-                game.load(originalFen);
-              }
-            } catch {
-              game.load(originalFen);
-            }
-          }
-        }
-      }
-
-      return false;
-    },
-    [],
-  );
+  // ----------------------------------------
+  // Game State Updates
+  // ----------------------------------------
 
   const updateGameState = useCallback(() => {
     const game = chessRef.current;
@@ -173,20 +54,16 @@ export function useElixirChess() {
     let status: GameState["status"] = "playing";
     let winner: PlayerColor | undefined;
 
-    // Custom checkmate check: it's only checkmate if:
-    // 1. chess.js says it's checkmate (no legal moves)
-    // 2. AND player can't block by placing a piece from their hand
     const isCheckmateByMoves = game.isCheckmate();
 
     if (isCheckmateByMoves) {
-      // Check if player can block by placing a piece from their hand
+      // Custom checkmate check: account for blocking with placed pieces
       setGameState((prev) => {
         const currentTurn = game.turn();
         const currentElixir = prev.elixir[currentTurn];
         const currentHand = prev.hands[currentTurn].cards;
-        const canBlock = canBlockCheckByPlacing(currentElixir, currentHand);
 
-        if (!canBlock) {
+        if (!canBlockCheckByPlacing(game, currentHand, currentElixir)) {
           status = "checkmate";
           winner = currentTurn === "w" ? "b" : "w";
         }
@@ -201,20 +78,19 @@ export function useElixirChess() {
         };
       });
 
-      // Clear selection after state update
       setSelectedSquare(null);
       setValidMoves([]);
       return;
-    } else if (game.isStalemate()) {
-      // Stalemate also needs to check if player can place a piece
-      // If they can place a piece, it's not stalemate (they have a "move")
+    }
+
+    if (game.isStalemate()) {
+      // Custom stalemate check: account for piece placement
       setGameState((prev) => {
         const currentTurn = game.turn();
         const currentElixir = prev.elixir[currentTurn];
         const currentHand = prev.hands[currentTurn].cards;
-        const canPlace = canPlaceAnyPiece(currentElixir, currentHand);
 
-        if (!canPlace) {
+        if (!canPlaceAnyPiece(game, currentHand, currentElixir)) {
           status = "stalemate";
         }
 
@@ -231,13 +107,14 @@ export function useElixirChess() {
       setSelectedSquare(null);
       setValidMoves([]);
       return;
-    } else if (game.isDraw()) {
+    }
+
+    if (game.isDraw()) {
       status = "draw";
     } else if (game.isInsufficientMaterial()) {
       status = "insufficient";
     }
 
-    // Clear selection after state update
     setSelectedSquare(null);
     setValidMoves([]);
 
@@ -249,26 +126,19 @@ export function useElixirChess() {
       winner,
       history: game.history(),
     }));
-  }, [canBlockCheckByPlacing, canPlaceAnyPiece]);
+  }, []);
+
+  // ----------------------------------------
+  // Game Actions
+  // ----------------------------------------
 
   const resetGame = useCallback(() => {
     chessRef.current = new Chess(INITIAL_FEN);
     setSelectedSquare(null);
     setValidMoves([]);
-    setGameState({
-      fen: INITIAL_FEN,
-      turn: "w",
-      elixir: { w: STARTING_ELIXIR, b: STARTING_ELIXIR },
-      hands: {
-        w: initializeHand(),
-        b: initializeHand(),
-      },
-      status: "playing",
-      history: [],
-    });
+    setGameState(createInitialGameState());
   }, []);
 
-  // Select a piece and compute valid moves
   const selectSquare = useCallback(
     (square: string | null) => {
       const game = chessRef.current;
@@ -281,13 +151,11 @@ export function useElixirChess() {
 
       const piece = game.get(square as Square);
 
-      // If clicking on own piece, select it
       if (piece && piece.color === game.turn()) {
         setSelectedSquare(square);
         const moves = game.moves({ square: square as Square, verbose: true });
         setValidMoves(moves.map((m) => m.to));
       } else if (selectedSquare) {
-        // If a piece is selected and clicking elsewhere, try to move
         setSelectedSquare(null);
         setValidMoves([]);
       }
@@ -295,36 +163,9 @@ export function useElixirChess() {
     [selectedSquare],
   );
 
-  // Check if placing a piece at a square would block check
-  const wouldBlockCheck = useCallback(
-    (type: PieceType, square: Square): boolean => {
-      const game = chessRef.current;
-      const turn = game.turn();
-
-      if (!game.inCheck()) return false;
-
-      const originalFen = game.fen();
-
-      try {
-        // Try placing the piece
-        const success = game.put({ type, color: turn }, square);
-        if (!success) {
-          game.load(originalFen);
-          return false;
-        }
-
-        // Check if still in check after placement
-        const stillInCheck = game.inCheck();
-        game.load(originalFen);
-
-        return !stillInCheck;
-      } catch {
-        game.load(originalFen);
-        return false;
-      }
-    },
-    [],
-  );
+  // ----------------------------------------
+  // Piece Placement
+  // ----------------------------------------
 
   const placePiece = useCallback(
     (type: PieceType, square: Square) => {
@@ -333,81 +174,50 @@ export function useElixirChess() {
       const cost = PIECE_COSTS[type];
       const currentElixir = gameState.elixir[turn];
       const currentHand = gameState.hands[turn];
-      const wasInCheck = game.inCheck(); // Check if player started turn in check
+      const wasInCheck = game.inCheck();
 
-      // 1. Validation
+      // Validation
       if (currentElixir < cost) return false;
-      if (game.get(square)) return false; // Occupied
+      if (game.get(square)) return false;
 
-      // Check if piece is in hand
       const cardIndex = currentHand.cards.indexOf(type);
-      if (cardIndex === -1) return false; // Piece not in hand!
+      if (cardIndex === -1) return false;
 
-      // Zone Check - but allow placing anywhere if it blocks check
-      const rank = parseInt(square[1]);
-      const isInPlacementZone = turn === "w" ? rank <= 3 : rank >= 6;
+      if (!isInPlacementZone(square, turn)) return false;
 
-      if (!isInPlacementZone) {
-        // Only allow placing outside zone if in check AND it blocks the check
-        if (!wasInCheck || !wouldBlockCheck(type, square)) {
-          return false;
-        }
-      }
-
-      // 2. Execution
+      // Execute placement
       const originalFen = game.fen();
 
       try {
         const success = game.put({ type, color: turn }, square);
         if (!success) return false;
 
-        // 3. Check for self-check
+        // Verify no self-check
         if (game.inCheck()) {
           game.load(originalFen);
           return false;
         }
 
-        // 4. Update State
+        // Update elixir
         const newElixir = { ...gameState.elixir };
-        newElixir[turn] -= cost; // Deduct cost
+        newElixir[turn] -= cost;
 
-        // 5. Update Hand - remove used card, cycle in next card
-        const newCards = [...currentHand.cards];
-        newCards.splice(cardIndex, 1); // Remove the used card
-        newCards.push(currentHand.nextCard); // Add next card to hand
-
-        // Draw new next card from deck, or generate new one if deck empty
-        const newDeck = [...currentHand.deck];
-        const newNextCard = newDeck.length > 0 ? newDeck.pop()! : drawCard();
-
+        // Cycle card
         const newHands = {
           ...gameState.hands,
-          [turn]: {
-            cards: newCards,
-            nextCard: newNextCard,
-            deck: newDeck,
-          },
+          [turn]: cycleCard(currentHand, cardIndex),
         };
 
-        // Check if this placement puts opponent in check
-        // We need to switch turn to see if opponent's king is attacked
-        const currentFen = game.fen();
-        const fenParts = currentFen.split(" ");
-        fenParts[1] = turn === "w" ? "b" : "w";
-        if (turn === "b") {
-          fenParts[5] = String(parseInt(fenParts[5]) + 1);
-        }
-        const newFen = fenParts.join(" ");
+        // Switch turn and check for opponent check
+        const newFen = switchTurnInFen(game.fen(), turn);
         game.load(newFen);
         const opponentNowInCheck = game.inCheck();
 
-        // MUTUAL FREEZE: No elixir gain if there was a check OR we're delivering check
-        // This prevents "check farming" exploits
+        // Mutual freeze: no elixir gain if check involved
         if (!wasInCheck && !opponentNowInCheck) {
           newElixir[turn] = Math.min(newElixir[turn] + 1, MAX_ELIXIR);
         }
 
-        // Turn is already switched in newFen
         setGameState((prev) => ({
           ...prev,
           fen: newFen,
@@ -420,28 +230,30 @@ export function useElixirChess() {
         return true;
       } catch (e) {
         game.load(originalFen);
-        console.error(e);
+        console.error("Placement error:", e);
         return false;
       }
     },
-    [gameState.elixir, gameState.hands, updateGameState, wouldBlockCheck],
+    [gameState.elixir, gameState.hands, updateGameState],
   );
+
+  // ----------------------------------------
+  // Move Execution
+  // ----------------------------------------
 
   const makeMove = useCallback(
     (from: Square, to: Square) => {
       const game = chessRef.current;
       const turn = game.turn();
-      const wasInCheck = game.inCheck(); // Check if player started turn in check
+      const wasInCheck = game.inCheck();
 
       try {
         const move = game.move({ from, to, promotion: "q" });
         if (!move) return false;
 
-        // Check if this move puts opponent in check
         const opponentNowInCheck = game.inCheck();
 
-        // MUTUAL FREEZE: No elixir gain if there was a check OR we're delivering check
-        // This prevents "check farming" exploits
+        // Mutual freeze: no elixir gain if check involved
         const newElixir = { ...gameState.elixir };
         if (!wasInCheck && !opponentNowInCheck) {
           newElixir[turn] = Math.min(newElixir[turn] + 1, MAX_ELIXIR);
@@ -454,23 +266,30 @@ export function useElixirChess() {
 
         updateGameState();
         return true;
-      } catch (e) {
+      } catch {
         return false;
       }
     },
     [gameState.elixir, updateGameState],
   );
 
+  // ----------------------------------------
+  // Return Hook API
+  // ----------------------------------------
+
   return {
+    // State
     gameState,
     chess: chessRef.current,
+    selectedSquare,
+    validMoves,
+    isInCheck: chessRef.current.inCheck(),
+
+    // Actions
     resetGame,
+    selectSquare,
     placePiece,
     makeMove,
     setGameState,
-    selectedSquare,
-    validMoves,
-    selectSquare,
-    isInCheck: chessRef.current.inCheck(),
   };
 }

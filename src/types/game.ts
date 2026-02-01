@@ -1,3 +1,7 @@
+// ============================================
+// Core Types
+// ============================================
+
 export type PlayerColor = "w" | "b";
 
 export type PieceType = "p" | "n" | "b" | "r" | "q" | "k";
@@ -7,48 +11,56 @@ export interface Piece {
   color: PlayerColor;
 }
 
-// Card hand system - like Clash Royale
+// ============================================
+// Card System Types
+// ============================================
+
 export interface CardHand {
-  cards: PieceType[]; // 4 cards in hand
-  nextCard: PieceType; // The card that will cycle in next
-  deck: PieceType[]; // Remaining cards in deck (shuffled)
+  cards: PieceType[]; // Cards currently in hand (4)
+  nextCard: PieceType; // Preview of next card to cycle in
+  deck: PieceType[]; // Remaining cards in deck
 }
+
+// ============================================
+// Game State
+// ============================================
+
+export type GameStatus =
+  | "playing"
+  | "checkmate"
+  | "draw"
+  | "stalemate"
+  | "insufficient";
 
 export interface GameState {
   fen: string;
   turn: PlayerColor;
-  elixir: {
-    w: number;
-    b: number;
-  };
-  hands: {
-    w: CardHand;
-    b: CardHand;
-  };
-  status: "playing" | "checkmate" | "draw" | "stalemate" | "insufficient";
+  elixir: Record<PlayerColor, number>;
+  hands: Record<PlayerColor, CardHand>;
+  status: GameStatus;
   winner?: PlayerColor;
-  history: string[]; // History of moves in SAN
+  history: string[];
 }
 
-export const PIECE_COSTS: Record<PieceType, number> = {
-  p: 1,
-  n: 3,
-  b: 3,
-  r: 5,
-  q: 9,
-  k: 0, // King cannot be bought
-};
+// ============================================
+// Drag & Drop Types
+// ============================================
 
-// Weighted rarity for card draws (higher = more common)
-// Total weights = 100 for easy percentage calculation
-export const CARD_WEIGHTS: Record<Exclude<PieceType, "k">, number> = {
-  p: 40, // 40% chance - very common
-  n: 20, // 20% chance - uncommon
-  b: 20, // 20% chance - uncommon
-  r: 12, // 12% chance - rare
-  q: 8, // 8% chance - legendary
-};
+export interface DragData {
+  type: PieceType;
+  color: PlayerColor;
+  source: "shop" | "board";
+  from?: string; // Square if dragging from board
+  cost?: number; // Cost if from shop
+}
 
-export const STARTING_ELIXIR = 1;
-export const MAX_ELIXIR = 10;
-export const HAND_SIZE = 4;
+// Re-export constants for backward compatibility
+export {
+  PIECE_COSTS,
+  CARD_WEIGHTS,
+  STARTING_ELIXIR,
+  MAX_ELIXIR,
+  HAND_SIZE,
+  PIECE_NAMES,
+  RARITY_COLORS,
+} from "../constants/game";
