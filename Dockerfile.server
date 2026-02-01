@@ -1,0 +1,88 @@
+# ============================================
+# Stage 1: Build shared package
+# ============================================
+FROM node:22-alpine AS shared-builder
+
+WORKDIR /app/shared
+
+# Copy and build shared package
+COPY shared/package*.json ./
+RUN npm ci --ignore-scripts
+
+COPY shared/ ./
+
+# Remove tsbuildinfo (causes tsc to skip rebuild if present)
+RUN rm -f tsconfig.tsbuildinfo && npm run build
+
+# ============================================
+# Stage 2: Build server
+# ============================================
+FROM node:22-alpine AS server-builder
+
+WORKDIR /app/server
+
+# Copy server package.json (without file: dependency for initial install)
+COPY server/package*.json ./
+
+# Create a temporary package.json without the file: dependency
+RUN sed -i 's/"@elixir-chess\/shared": "file:..\/shared",//' package.json
+
+# Install other dependencies
+RUN npm install --ignore-scripts
+
+# Now manually add the shared package to node_modules
+COPY --from=shared-builder /app/shared/dist ./node_modules/@elixir-chess/shared/dist
+COPY --from=shared-builder /app/shared/package.json ./node_modules/@elixir-chess/shared/
+
+# Copy server source
+COPY server/ ./
+
+# Remove project references from tsconfig for Docker build
+RUN sed -i 's/"references".*$//' tsconfig.json && \
+    sed -i '/^[[:space:]]*$/d' tsconfig.json
+
+# Restore original package.json for reference
+COPY server/package.json ./
+
+# Build server
+RUN npm run build
+
+# ============================================
+# Stage 3: Production server (minimal)
+# ============================================
+FROM node:22-alpine AS server
+
+WORKDIR /app
+
+# Add non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+# Copy server package.json (strip file: dependency for prod install)
+COPY server/package*.json ./
+RUN sed -i 's/"@elixir-chess\/shared": "file:..\/shared",//' package.json
+
+# Install production dependencies only (without shared)
+RUN npm ci --omit=dev --ignore-scripts
+
+# Copy shared package to node_modules manually
+COPY --from=shared-builder /app/shared/dist ./node_modules/@elixir-chess/shared/dist
+COPY --from=shared-builder /app/shared/package.json ./node_modules/@elixir-chess/shared/
+
+# Copy server build output
+COPY --from=server-builder /app/server/dist ./dist
+
+# Set ownership
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
+
+CMD ["node", "dist/index.js"]

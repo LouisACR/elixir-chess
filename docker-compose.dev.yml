@@ -1,0 +1,46 @@
+# Development docker-compose with hot reload
+services:
+  # ============================================
+  # Client - Vite dev server with hot reload
+  # ============================================
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: client-dev
+    container_name: elixir-chess-client-dev
+    volumes:
+      - ./client/src:/app/client/src:ro
+      - ./shared/src:/app/shared/src:ro
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_SERVER_URL=http://localhost:3001
+    depends_on:
+      - server
+    networks:
+      - elixir-chess-network
+
+  # ============================================
+  # Server - tsx with watch mode
+  # ============================================
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: server-dev
+    container_name: elixir-chess-server-dev
+    volumes:
+      - ./server/src:/app/server/src:ro
+      - ./shared/src:/app/shared/src:ro
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    networks:
+      - elixir-chess-network
+
+networks:
+  elixir-chess-network:
+    driver: bridge

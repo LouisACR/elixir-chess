@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+*/node_modules
+**/node_modules
+
+# Build outputs
+dist
+*/dist
+**/dist
+client/dist
+
+# TypeScript build info (causes incremental build issues)
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage
+.nyc_output
+
+# Misc
+.DS_Store
+Thumbs.db
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Environment
+.env
+.env.*
+!.env.example

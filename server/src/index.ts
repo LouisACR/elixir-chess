@@ -13,11 +13,25 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 app.use(cors());
 
+// Health check endpoint for Docker
+app.get("/health", (_req, res) => {
+  res
+    .status(200)
+    .json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
 const httpServer = createServer(app);
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin:
+      process.env.NODE_ENV === "production"
+        ? true // Allow all origins in production (nginx handles this)
+        : [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://localhost:80",
+          ],
     methods: ["GET", "POST"],
   },
 });

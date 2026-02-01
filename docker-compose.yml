@@ -1,0 +1,54 @@
+services:
+  # ============================================
+  # Client - Nginx serving static React app
+  # ============================================
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: elixir-chess-client
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80" # Only expose to localhost for cloudflared
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - elixir-chess-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+
+  # ============================================
+  # Server - Node.js Express + Socket.IO
+  # ============================================
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: elixir-chess-server
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    expose:
+      - "3001"
+    networks:
+      - elixir-chess-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 64M
+
+networks:
+  elixir-chess-network:
+    driver: bridge

@@ -4,7 +4,11 @@ import type {
   ServerToClientEvents,
 } from "@elixir-chess/shared";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+// In production, connect to same origin (nginx proxies /socket.io to server)
+// In development, connect to localhost:3001
+const SERVER_URL =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.PROD ? "" : "http://localhost:3001");
 
 export type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
