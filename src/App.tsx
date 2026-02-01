@@ -69,6 +69,7 @@ function useDragValidMoves(
 function App() {
   const {
     gameState,
+    timers,
     chess,
     placePiece,
     makeMove,
@@ -169,6 +170,7 @@ function App() {
         {/* Top HUD - Opponent Elixir + Game Status */}
         <TopHUD
           gameState={gameState}
+          timers={timers}
           onRestart={resetGame}
           isInCheck={isInCheck}
           elixirGain={lastElixirGain}
@@ -187,6 +189,7 @@ function App() {
         {/* Bottom HUD - Player Elixir */}
         <BottomHUD
           gameState={gameState}
+          timers={timers}
           isInCheck={isInCheck}
           elixirGain={lastElixirGain}
         />

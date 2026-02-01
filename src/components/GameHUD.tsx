@@ -63,11 +63,22 @@ const ElixirGainAnimation: React.FC<ElixirGainAnimationProps> = ({
 };
 
 // ============================================
+// Helper Functions
+// ============================================
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+// ============================================
 // Elixir Bar Component
 // ============================================
 
 interface ElixirBarProps {
   elixir: number;
+  timer: number;
   color: PlayerColor;
   isCurrentTurn: boolean;
   isInCheck?: boolean;
@@ -77,6 +88,7 @@ interface ElixirBarProps {
 
 const ElixirBar: React.FC<ElixirBarProps> = ({
   elixir,
+  timer,
   color,
   isCurrentTurn,
   isInCheck,
@@ -87,21 +99,15 @@ const ElixirBar: React.FC<ElixirBarProps> = ({
     null,
   );
 
-  // Animation shows on BOTTOM bar only, representing the player who just acted
-  // The previous player (who gained elixir) is the opposite of current turn (bottom's color)
+  // Show animation on the bar whose player gained elixir
   useEffect(() => {
     if (!elixirGain) return;
 
-    // Only show animation on bottom bar
-    if (position === "bottom") {
-      // The player who just gained elixir is the opposite of current color
-      // (they acted, then turn switched, so they're now the opponent)
-      const previousPlayer = color === "w" ? "b" : "w";
-      if (elixirGain.player === previousPlayer) {
-        setShowGainAnimation(elixirGain.timestamp);
-      }
+    // Show animation if this bar's color matches the player who gained elixir
+    if (elixirGain.player === color) {
+      setShowGainAnimation(elixirGain.timestamp);
     }
-  }, [elixirGain, color, position]);
+  }, [elixirGain, color]);
 
   const isWhite = color === "w";
   const playerName = isWhite ? "White" : "Black";
@@ -147,13 +153,13 @@ const ElixirBar: React.FC<ElixirBarProps> = ({
             flexDirection: position === "top" ? "row" : "row",
           }}
         >
-          {/* Player Indicator */}
+          {/* Player Indicator with Turn Badge */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 6,
-              minWidth: 70,
+              minWidth: 100,
             }}
           >
             <div
@@ -185,24 +191,24 @@ const ElixirBar: React.FC<ElixirBarProps> = ({
             >
               {playerName}
             </span>
-          </div>
-
-          {/* Current Turn Indicator */}
-          {isCurrentTurn && (
+            {/* Turn indicator - always takes space to prevent layout shift */}
             <div
               style={{
-                background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
-                color: "#1f2937",
-                padding: "2px 8px",
+                background: isCurrentTurn
+                  ? "linear-gradient(135deg, #fbbf24, #f59e0b)"
+                  : "transparent",
+                color: isCurrentTurn ? "#1f2937" : "transparent",
+                padding: "2px 6px",
                 borderRadius: 10,
                 fontSize: 9,
                 fontWeight: 900,
                 textTransform: "uppercase",
+                visibility: isCurrentTurn ? "visible" : "hidden",
               }}
             >
               TURN
             </div>
-          )}
+          </div>
 
           {/* Check Badge */}
           {isInCheck && isCurrentTurn && (
@@ -296,6 +302,30 @@ const ElixirBar: React.FC<ElixirBarProps> = ({
               />
             )}
           </div>
+
+          {/* Timer */}
+          <div
+            style={{
+              minWidth: 50,
+              textAlign: "center",
+              padding: "2px 8px",
+              borderRadius: 8,
+              background:
+                timer <= 30 ? "rgba(239, 68, 68, 0.3)" : "rgba(0, 0, 0, 0.4)",
+              border:
+                timer <= 30
+                  ? "1px solid #ef4444"
+                  : "1px solid rgba(255,255,255,0.1)",
+              color: timer <= 30 ? "#fca5a5" : "#d1d5db",
+              fontWeight: 900,
+              fontSize: 14,
+              fontFamily: "monospace",
+              animation:
+                timer <= 10 && isCurrentTurn ? "pulse 1s infinite" : "none",
+            }}
+          >
+            {formatTime(timer)}
+          </div>
         </div>
       </div>
     </div>
@@ -308,6 +338,7 @@ const ElixirBar: React.FC<ElixirBarProps> = ({
 
 interface TopHUDProps {
   gameState: GameState;
+  timers: Record<PlayerColor, number>;
   onRestart: () => void;
   isInCheck?: boolean;
   elixirGain?: ElixirGainEvent | null;
@@ -315,15 +346,17 @@ interface TopHUDProps {
 
 export const TopHUD: React.FC<TopHUDProps> = ({
   gameState,
+  timers,
   onRestart,
   isInCheck,
   elixirGain,
 }) => {
   const { elixir, turn, status, winner } = gameState;
-  // Top shows the opponent (black when it's white's turn, white when it's black's turn)
-  const opponentColor: PlayerColor = turn === "w" ? "b" : "w";
-  const opponentElixir = elixir[opponentColor];
-  const isOpponentInCheck = isInCheck && turn !== opponentColor;
+  // Top always shows black's elixir (fixed position)
+  const blackElixir = elixir.b;
+  const blackTimer = timers.b;
+  const isBlackTurn = turn === "b";
+  const isBlackInCheck = isInCheck && turn === "b";
 
   return (
     <div style={{ width: "100%" }}>
@@ -357,7 +390,7 @@ export const TopHUD: React.FC<TopHUDProps> = ({
             }}
           >
             <Crown size={16} />
-            {status === "checkmate"
+            {status === "checkmate" || status === "timeout"
               ? `${winner === "w" ? "White" : "Black"} Wins!`
               : status.toUpperCase()}
           </div>
@@ -396,12 +429,13 @@ export const TopHUD: React.FC<TopHUDProps> = ({
         </button>
       </div>
 
-      {/* Opponent Elixir Bar */}
+      {/* Black Player Elixir Bar (always top) */}
       <ElixirBar
-        elixir={opponentElixir}
-        color={opponentColor}
-        isCurrentTurn={false}
-        isInCheck={isOpponentInCheck}
+        elixir={blackElixir}
+        timer={blackTimer}
+        color="b"
+        isCurrentTurn={isBlackTurn}
+        isInCheck={isBlackInCheck}
         position="top"
         elixirGain={elixirGain}
       />
@@ -415,52 +449,33 @@ export const TopHUD: React.FC<TopHUDProps> = ({
 
 interface BottomHUDProps {
   gameState: GameState;
+  timers: Record<PlayerColor, number>;
   isInCheck?: boolean;
   elixirGain?: ElixirGainEvent | null;
 }
 
 export const BottomHUD: React.FC<BottomHUDProps> = ({
   gameState,
+  timers,
   isInCheck,
   elixirGain,
 }) => {
   const { elixir, turn } = gameState;
-  const currentElixir = elixir[turn];
+  // Bottom always shows white's elixir (fixed position)
+  const whiteElixir = elixir.w;
+  const whiteTimer = timers.w;
+  const isWhiteTurn = turn === "w";
+  const isWhiteInCheck = isInCheck && turn === "w";
 
   return (
     <ElixirBar
-      elixir={currentElixir}
-      color={turn}
-      isCurrentTurn={true}
-      isInCheck={isInCheck}
+      elixir={whiteElixir}
+      timer={whiteTimer}
+      color="w"
+      isCurrentTurn={isWhiteTurn}
+      isInCheck={isWhiteInCheck}
       position="bottom"
       elixirGain={elixirGain}
     />
-  );
-};
-
-// ============================================
-// Legacy GameHUD (for backwards compatibility)
-// ============================================
-
-interface GameHUDProps {
-  gameState: GameState;
-  onRestart: () => void;
-  isInCheck?: boolean;
-}
-
-export const GameHUD: React.FC<GameHUDProps> = ({
-  gameState,
-  onRestart,
-  isInCheck,
-}) => {
-  return (
-    <>
-      <TopHUD
-        gameState={gameState}
-        onRestart={onRestart}
-        isInCheck={isInCheck}
-      />
-    </>
   );
 };

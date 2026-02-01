@@ -13,9 +13,4 @@ export {
 } from "./chess";
 
 // Elixir utilities
-export {
-  calculateElixirGain,
-  deductElixir,
-  canAfford,
-  updateElixirState,
-} from "./elixir";
+export { deductElixir, canAfford, addElixir } from "./elixir";

@@ -1,12 +1,12 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "chess.js";
 import type { GameState, PlayerColor, PieceType } from "../types/game";
 import {
   INITIAL_FEN,
   STARTING_ELIXIR,
-  MAX_ELIXIR,
   PIECE_COSTS,
+  INITIAL_TIME,
 } from "../constants/game";
 import { initializeHand, cycleCard } from "../utils/cards";
 import {
@@ -15,6 +15,7 @@ import {
   canPlaceAnyPiece,
   switchTurnInFen,
 } from "../utils/chess";
+import { addElixir } from "../utils/elixir";
 
 // ============================================
 // Types
@@ -39,6 +40,7 @@ function createInitialGameState(): GameState {
       w: initializeHand(),
       b: initializeHand(),
     },
+    timers: { w: INITIAL_TIME, b: INITIAL_TIME },
     status: "playing",
     history: [],
   };
@@ -56,6 +58,59 @@ export function useElixirChess() {
   const [lastElixirGain, setLastElixirGain] = useState<ElixirGainEvent | null>(
     null,
   );
+
+  // Separate timer state to avoid conflicts with gameState updates
+  const [timers, setTimers] = useState<Record<PlayerColor, number>>({
+    w: INITIAL_TIME,
+    b: INITIAL_TIME,
+  });
+
+  // Use ref to track current turn for timer (avoids stale closure)
+  const currentTurnRef = useRef<PlayerColor>(gameState.turn);
+  currentTurnRef.current = gameState.turn;
+
+  const gameStatusRef = useRef(gameState.status);
+  gameStatusRef.current = gameState.status;
+
+  // ----------------------------------------
+  // Timer Logic
+  // ----------------------------------------
+
+  // Timer runs continuously and reads turn from ref
+  useEffect(() => {
+    // Only run timer if game is playing
+    if (gameState.status !== "playing") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      // Read from ref to get latest value
+      if (gameStatusRef.current !== "playing") return;
+
+      const currentTurn = currentTurnRef.current;
+
+      setTimers((prev) => {
+        const newTime = Math.max(0, prev[currentTurn] - 0.1);
+
+        // Check for timeout
+        if (newTime <= 0) {
+          // Set game over via gameState
+          setGameState((prevGame) => ({
+            ...prevGame,
+            status: "timeout",
+            winner: currentTurn === "w" ? "b" : "w",
+          }));
+          return { ...prev, [currentTurn]: 0 };
+        }
+
+        return { ...prev, [currentTurn]: newTime };
+      });
+    }, 100); // Update every 100ms
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [gameState.status]); // Only recreate on status change, not turn change
 
   // ----------------------------------------
   // Game State Updates
@@ -150,6 +205,7 @@ export function useElixirChess() {
     setSelectedSquare(null);
     setValidMoves([]);
     setGameState(createInitialGameState());
+    setTimers({ w: INITIAL_TIME, b: INITIAL_TIME });
     setLastElixirGain(null);
   }, []);
 
@@ -226,30 +282,66 @@ export function useElixirChess() {
         const newFen = switchTurnInFen(game.fen(), turn);
         game.load(newFen);
         const opponentNowInCheck = game.inCheck();
+        const newTurn: PlayerColor = turn === "w" ? "b" : "w";
 
         // Mutual freeze: no elixir gain if check involved
         if (!wasInCheck && !opponentNowInCheck) {
-          newElixir[turn] = Math.min(newElixir[turn] + 1, MAX_ELIXIR);
-          // Trigger elixir gain animation for the player who just moved (now opponent's turn)
+          newElixir[turn] = addElixir(newElixir[turn], 1);
+          // Trigger elixir gain animation for the player who just moved
           setLastElixirGain({
             player: turn,
             amount: 1,
             timestamp: Date.now(),
           });
         } else {
-          // No elixir gained due to check - clear any previous animation
+          // No elixir gained due to check
           setLastElixirGain(null);
         }
+
+        // Determine game status
+        // Note: isDraw() and isInsufficientMaterial() don't apply in Elixir Chess
+        // because players can always place new pieces
+        let status: GameState["status"] = "playing";
+        let winner: PlayerColor | undefined;
+
+        if (game.isCheckmate()) {
+          // Check if opponent can block by placing
+          if (
+            !canBlockCheckByPlacing(
+              game,
+              gameState.hands[newTurn].cards,
+              gameState.elixir[newTurn],
+            )
+          ) {
+            status = "checkmate";
+            winner = turn;
+          }
+        } else if (game.isStalemate()) {
+          if (
+            !canPlaceAnyPiece(
+              game,
+              gameState.hands[newTurn].cards,
+              gameState.elixir[newTurn],
+            )
+          ) {
+            status = "stalemate";
+          }
+        }
+        // Removed: isDraw() and isInsufficientMaterial() checks
 
         setGameState((prev) => ({
           ...prev,
           fen: newFen,
-          turn: turn === "w" ? "b" : "w",
+          turn: newTurn,
           elixir: newElixir,
           hands: newHands,
+          status,
+          winner,
+          history: game.history(),
         }));
 
-        updateGameState();
+        setSelectedSquare(null);
+        setValidMoves([]);
         return true;
       } catch (e) {
         game.load(originalFen);
@@ -257,7 +349,7 @@ export function useElixirChess() {
         return false;
       }
     },
-    [gameState.elixir, gameState.hands, updateGameState],
+    [gameState.elixir, gameState.hands],
   );
 
   // ----------------------------------------
@@ -275,34 +367,55 @@ export function useElixirChess() {
         if (!move) return false;
 
         const opponentNowInCheck = game.inCheck();
+        const newTurn = game.turn(); // Get the new turn from chess.js
 
         // Mutual freeze: no elixir gain if check involved
         const newElixir = { ...gameState.elixir };
         if (!wasInCheck && !opponentNowInCheck) {
-          newElixir[turn] = Math.min(newElixir[turn] + 1, MAX_ELIXIR);
-          // Trigger elixir gain animation for the player who just moved (now opponent's turn)
+          newElixir[turn] = addElixir(newElixir[turn], 1);
+          // Trigger elixir gain animation for the player who just moved
           setLastElixirGain({
             player: turn,
             amount: 1,
             timestamp: Date.now(),
           });
         } else {
-          // No elixir gained due to check - clear any previous animation
+          // No elixir gained due to check
           setLastElixirGain(null);
         }
 
+        // Determine game status
+        // Note: isDraw() and isInsufficientMaterial() don't apply in Elixir Chess
+        // because players can always place new pieces
+        let status: GameState["status"] = "playing";
+        let winner: PlayerColor | undefined;
+
+        if (game.isCheckmate()) {
+          status = "checkmate";
+          winner = turn; // The player who just moved wins
+        } else if (game.isStalemate()) {
+          status = "stalemate";
+        }
+        // Removed: isDraw() and isInsufficientMaterial() checks
+
         setGameState((prev) => ({
           ...prev,
+          fen: game.fen(),
+          turn: newTurn,
           elixir: newElixir,
+          status,
+          winner,
+          history: game.history(),
         }));
 
-        updateGameState();
+        setSelectedSquare(null);
+        setValidMoves([]);
         return true;
       } catch {
         return false;
       }
     },
-    [gameState.elixir, updateGameState],
+    [gameState.elixir],
   );
 
   // ----------------------------------------
@@ -312,6 +425,7 @@ export function useElixirChess() {
   return {
     // State
     gameState,
+    timers, // Separate timer state
     chess: chessRef.current,
     selectedSquare,
     validMoves,

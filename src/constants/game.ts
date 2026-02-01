@@ -55,3 +55,6 @@ export const PLACEMENT_ZONES = {
   w: [1, 2, 3], // White places on ranks 1-3
   b: [6, 7, 8], // Black places on ranks 6-8
 } as const;
+
+// Timer settings (in seconds)
+export const INITIAL_TIME = 3 * 60; // 3 minutes per side

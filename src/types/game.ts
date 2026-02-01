@@ -30,13 +30,15 @@ export type GameStatus =
   | "checkmate"
   | "draw"
   | "stalemate"
-  | "insufficient";
+  | "insufficient"
+  | "timeout";
 
 export interface GameState {
   fen: string;
   turn: PlayerColor;
   elixir: Record<PlayerColor, number>;
   hands: Record<PlayerColor, CardHand>;
+  timers: Record<PlayerColor, number>; // Time remaining in seconds
   status: GameStatus;
   winner?: PlayerColor;
   history: string[];
