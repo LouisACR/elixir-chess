@@ -9,8 +9,13 @@ import {
   ArrowLeft,
   Wifi,
   WifiOff,
+  Zap,
+  Flame,
+  Clock,
 } from "lucide-react";
 import type { ConnectionStatus } from "../hooks/useMultiplayerGame";
+import type { TimeControlType } from "@elixir-chess/shared";
+import { TIME_CONTROLS } from "@elixir-chess/shared";
 
 // ============================================
 // Types
@@ -33,7 +38,7 @@ interface LobbyScreenProps {
   playerColor: "w" | "b" | null;
   error: string | null;
   onConnect: () => void;
-  onCreateRoom: () => void;
+  onCreateRoom: (timeControl: TimeControlType) => void;
   onJoinRoom: (code: string) => void;
   onBack: () => void;
 }
@@ -105,6 +110,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 }) => {
   const [joinCode, setJoinCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [selectedTimeControl, setSelectedTimeControl] =
+    useState<TimeControlType>("blitz");
 
   const handleCopyCode = () => {
     if (roomId) {
@@ -119,6 +126,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     if (joinCode.trim()) {
       onJoinRoom(joinCode.trim());
     }
+  };
+
+  const handleCreateRoom = () => {
+    onCreateRoom(selectedTimeControl);
   };
 
   const isConnecting = connectionStatus === "connecting";
@@ -236,17 +247,71 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         </div>
       ) : (
         /* Create or Join */
-        <div className="flex flex-col gap-6 w-full max-w-xs">
+        <div className="flex flex-col gap-6 w-full max-w-md">
+          {/* Time Control Selection */}
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-white/70 text-sm font-medium">
+              Choisissez le mode de temps
+            </p>
+            <div className="flex gap-3">
+              {(["bullet", "blitz", "rapid"] as TimeControlType[]).map((tc) => {
+                const config = TIME_CONTROLS[tc];
+                const isSelected = selectedTimeControl === tc;
+                const IconComponent =
+                  tc === "bullet" ? Zap : tc === "blitz" ? Flame : Clock;
+                const minutes = Math.floor(config.time / 60);
+
+                return (
+                  <button
+                    key={tc}
+                    onClick={() => setSelectedTimeControl(tc)}
+                    className={`relative flex flex-col items-center gap-2 px-5 py-4 rounded-xl transition-all duration-200 border-2 ${
+                      isSelected
+                        ? "bg-white/20 scale-105 shadow-lg"
+                        : "bg-white/5 hover:bg-white/10 hover:scale-102 border-transparent"
+                    }`}
+                    style={{
+                      borderColor: isSelected ? config.color : "transparent",
+                      boxShadow: isSelected
+                        ? `0 0 20px ${config.color}40`
+                        : undefined,
+                    }}
+                  >
+                    <div
+                      className={`p-2 rounded-full transition-all ${isSelected ? "scale-110" : ""}`}
+                      style={{ backgroundColor: `${config.color}20` }}
+                    >
+                      <IconComponent
+                        className="w-6 h-6"
+                        style={{ color: config.color }}
+                      />
+                    </div>
+                    <span className="text-white font-bold text-sm">
+                      {config.label}
+                    </span>
+                    <span className="text-white/50 text-xs">{minutes} min</span>
+                    {isSelected && (
+                      <div
+                        className="absolute -top-1 -right-1 w-3 h-3 rounded-full"
+                        style={{ backgroundColor: config.color }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <button
-            onClick={onCreateRoom}
+            onClick={handleCreateRoom}
             className="flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-b from-green-500 to-green-700 hover:from-green-400 hover:to-green-600 rounded-xl text-white font-bold text-xl shadow-lg border-b-4 border-green-900 hover:border-green-800 transition-all hover:scale-105 active:scale-95 active:border-b-2"
           >
-            Create Room
+            Créer une partie
           </button>
 
           <div className="flex items-center gap-4">
             <div className="flex-1 h-px bg-white/20" />
-            <span className="text-white/50 text-sm">OR</span>
+            <span className="text-white/50 text-sm">OU</span>
             <div className="flex-1 h-px bg-white/20" />
           </div>
 
@@ -255,7 +320,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               type="text"
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="Enter room code"
+              placeholder="Entrez le code de la salle"
               maxLength={6}
               className="px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white text-center text-xl font-mono tracking-widest placeholder:text-white/30 focus:outline-none focus:border-blue-400 transition-colors"
             />
@@ -264,7 +329,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               disabled={!joinCode.trim()}
               className="flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 disabled:from-gray-500 disabled:to-gray-700 rounded-xl text-white font-bold text-xl shadow-lg border-b-4 border-blue-900 disabled:border-gray-900 transition-all hover:scale-105 active:scale-95 disabled:scale-100"
             >
-              Join Room
+              Rejoindre
             </button>
           </form>
         </div>
