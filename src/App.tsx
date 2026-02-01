@@ -13,7 +13,7 @@ import type { Square } from "chess.js";
 import { useElixirChess } from "./hooks/useElixirChess";
 import { Board } from "./components/Board";
 import { Shop } from "./components/Shop";
-import { GameHUD } from "./components/GameHUD";
+import { TopHUD, BottomHUD } from "./components/GameHUD";
 import { PieceIcon } from "./components/PieceIcons";
 import { getValidPlacementSquares } from "./utils/chess";
 import type { DragData, PieceType } from "./types/game";
@@ -77,6 +77,7 @@ function App() {
     validMoves,
     selectSquare,
     isInCheck,
+    lastElixirGain,
   } = useElixirChess();
 
   const [activeDragData, setActiveDragData] = useState<DragData | null>(null);
@@ -165,11 +166,12 @@ function App() {
       onDragEnd={handleDragEnd}
     >
       <div className="game-bg h-full w-full flex flex-col overflow-hidden">
-        {/* Game Status Bar */}
-        <GameHUD
+        {/* Top HUD - Opponent Elixir + Game Status */}
+        <TopHUD
           gameState={gameState}
           onRestart={resetGame}
           isInCheck={isInCheck}
+          elixirGain={lastElixirGain}
         />
 
         {/* Board Container */}
@@ -181,6 +183,13 @@ function App() {
             onSquareClick={handleSquareClick}
           />
         </div>
+
+        {/* Bottom HUD - Player Elixir */}
+        <BottomHUD
+          gameState={gameState}
+          isInCheck={isInCheck}
+          elixirGain={lastElixirGain}
+        />
 
         {/* Bottom Card Shop */}
         <Shop turn={gameState.turn} elixir={currentElixir} hand={currentHand} />

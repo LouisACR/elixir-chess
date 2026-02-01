@@ -17,6 +17,16 @@ import {
 } from "../utils/chess";
 
 // ============================================
+// Types
+// ============================================
+
+export interface ElixirGainEvent {
+  player: PlayerColor;
+  amount: number;
+  timestamp: number;
+}
+
+// ============================================
 // Initial State Factory
 // ============================================
 
@@ -43,6 +53,9 @@ export function useElixirChess() {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [validMoves, setValidMoves] = useState<string[]>([]);
   const [gameState, setGameState] = useState<GameState>(createInitialGameState);
+  const [lastElixirGain, setLastElixirGain] = useState<ElixirGainEvent | null>(
+    null,
+  );
 
   // ----------------------------------------
   // Game State Updates
@@ -137,6 +150,7 @@ export function useElixirChess() {
     setSelectedSquare(null);
     setValidMoves([]);
     setGameState(createInitialGameState());
+    setLastElixirGain(null);
   }, []);
 
   const selectSquare = useCallback(
@@ -216,6 +230,15 @@ export function useElixirChess() {
         // Mutual freeze: no elixir gain if check involved
         if (!wasInCheck && !opponentNowInCheck) {
           newElixir[turn] = Math.min(newElixir[turn] + 1, MAX_ELIXIR);
+          // Trigger elixir gain animation for the player who just moved (now opponent's turn)
+          setLastElixirGain({
+            player: turn,
+            amount: 1,
+            timestamp: Date.now(),
+          });
+        } else {
+          // No elixir gained due to check - clear any previous animation
+          setLastElixirGain(null);
         }
 
         setGameState((prev) => ({
@@ -257,6 +280,15 @@ export function useElixirChess() {
         const newElixir = { ...gameState.elixir };
         if (!wasInCheck && !opponentNowInCheck) {
           newElixir[turn] = Math.min(newElixir[turn] + 1, MAX_ELIXIR);
+          // Trigger elixir gain animation for the player who just moved (now opponent's turn)
+          setLastElixirGain({
+            player: turn,
+            amount: 1,
+            timestamp: Date.now(),
+          });
+        } else {
+          // No elixir gained due to check - clear any previous animation
+          setLastElixirGain(null);
         }
 
         setGameState((prev) => ({
@@ -284,6 +316,7 @@ export function useElixirChess() {
     selectedSquare,
     validMoves,
     isInCheck: chessRef.current.inCheck(),
+    lastElixirGain,
 
     // Actions
     resetGame,
