@@ -1,66 +1,221 @@
-import React from 'react';
-import { MAX_ELIXIR } from '../types/game';
-import type { GameState } from '../types/game';
-import { RotateCcw } from 'lucide-react';
+import React from "react";
+import { MAX_ELIXIR } from "../types/game";
+import type { GameState } from "../types/game";
+import { RotateCcw } from "lucide-react";
 
 interface GameHUDProps {
   gameState: GameState;
   onRestart: () => void;
+  isInCheck?: boolean;
 }
 
-export const GameHUD: React.FC<GameHUDProps> = ({ gameState, onRestart }) => {
+export const GameHUD: React.FC<GameHUDProps> = ({
+  gameState,
+  onRestart,
+  isInCheck,
+}) => {
   const { elixir, turn, status, winner } = gameState;
+  const currentElixir = elixir[turn];
 
   return (
-    <div className="w-full max-w-[500px] mx-auto mb-4 flex flex-col gap-2">
-      {/* Header with Turn and Status */}
-      <div className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-stone-200">
-        <div className="flex items-center gap-2">
-          <div className={`w-3 h-3 rounded-full ${turn === 'w' ? 'bg-white border-2 border-black' : 'bg-black'}`} />
-          <span className="font-bold text-stone-700">
-            {turn === 'w' ? 'White' : 'Black'}'s Turn
+    <div
+      style={{
+        width: "100%",
+        maxWidth: 500,
+        margin: "0 auto",
+        padding: "8px 16px",
+      }}
+    >
+      {/* Turn Indicator & Status */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {/* Player indicator */}
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              background:
+                turn === "w"
+                  ? "linear-gradient(135deg, #fff 0%, #d1d5db 100%)"
+                  : "linear-gradient(135deg, #374151 0%, #111827 100%)",
+              border: "3px solid #fbbf24",
+              boxShadow: "0 0 10px rgba(251, 191, 36, 0.5)",
+            }}
+          />
+          <span
+            style={{
+              color: "#fbbf24",
+              fontWeight: 900,
+              fontSize: 16,
+              textTransform: "uppercase",
+              textShadow: "0 2px 4px rgba(0,0,0,0.5)",
+            }}
+          >
+            {turn === "w" ? "White" : "Black"}
           </span>
+
+          {/* Check Badge */}
+          {isInCheck && status === "playing" && (
+            <span
+              style={{
+                background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                color: "white",
+                padding: "4px 12px",
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 900,
+                textTransform: "uppercase",
+                animation: "pulse 1s infinite",
+                boxShadow: "0 0 15px rgba(239, 68, 68, 0.6)",
+              }}
+            >
+              ⚠️ CHECK!
+            </span>
+          )}
         </div>
 
-        {status !== 'playing' && (
-           <div className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold uppercase">
-             {status === 'checkmate' ? `Checkmate! ${winner === 'w' ? 'White' : 'Black'} Wins` : status}
-           </div>
+        {/* Game Over Status */}
+        {status !== "playing" && (
+          <div
+            style={{
+              background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+              color: "#1f2937",
+              padding: "6px 16px",
+              borderRadius: 20,
+              fontSize: 13,
+              fontWeight: 900,
+              textTransform: "uppercase",
+              boxShadow: "0 4px 15px rgba(251, 191, 36, 0.4)",
+            }}
+          >
+            {status === "checkmate"
+              ? `👑 ${winner === "w" ? "White" : "Black"} Wins!`
+              : status.toUpperCase()}
+          </div>
         )}
 
+        {/* Restart Button */}
         <button
           onClick={onRestart}
-          className="p-2 hover:bg-stone-100 rounded-lg text-stone-500 transition-colors"
+          style={{
+            background: "linear-gradient(135deg, #4b5563, #374151)",
+            border: "2px solid #6b7280",
+            borderRadius: 10,
+            padding: 8,
+            color: "#d1d5db",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
           title="Restart Game"
         >
           <RotateCcw size={20} />
         </button>
       </div>
 
-      {/* Elixir Bars */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* White */}
-        <div className="bg-white p-2 rounded-lg border border-stone-200 shadow-sm flex flex-col items-center">
-             <span className="text-xs font-bold text-stone-400 uppercase mb-1">White Elixir</span>
-             <div className="w-full h-4 bg-stone-100 rounded-full overflow-hidden relative">
-                <div
-                    className="absolute left-0 top-0 bottom-0 bg-purple-500 transition-all duration-300"
-                    style={{ width: `${(elixir.w / MAX_ELIXIR) * 100}%` }}
-                />
-             </div>
-             <span className="text-purple-600 font-bold text-lg mt-1">{elixir.w}/{MAX_ELIXIR}</span>
-        </div>
+      {/* Elixir Bar - Clash Royale style */}
+      <div
+        style={{
+          background: "rgba(0, 0, 0, 0.6)",
+          borderRadius: 12,
+          padding: "8px 12px",
+          border: "2px solid rgba(124, 58, 237, 0.5)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          {/* Elixir Drop Icon */}
+          <div
+            style={{
+              fontSize: 24,
+              filter: "drop-shadow(0 0 8px rgba(236, 72, 153, 0.8))",
+            }}
+          >
+            💧
+          </div>
 
-        {/* Black */}
-         <div className="bg-black p-2 rounded-lg border border-stone-800 shadow-sm flex flex-col items-center text-white">
-             <span className="text-xs font-bold text-stone-500 uppercase mb-1">Black Elixir</span>
-             <div className="w-full h-4 bg-stone-800 rounded-full overflow-hidden relative">
+          {/* Elixir Bar */}
+          <div
+            style={{
+              flex: 1,
+              height: 24,
+              background: "rgba(0, 0, 0, 0.5)",
+              borderRadius: 12,
+              overflow: "hidden",
+              position: "relative",
+              border: "2px solid rgba(124, 58, 237, 0.6)",
+            }}
+          >
+            {/* Elixir Fill */}
+            <div
+              className="elixir-bar"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: `${(currentElixir / MAX_ELIXIR) * 100}%`,
+                borderRadius: 10,
+                transition: "width 0.3s ease-out",
+              }}
+            />
+
+            {/* Segment markers */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+              }}
+            >
+              {[...Array(MAX_ELIXIR)].map((_, i) => (
                 <div
-                    className="absolute left-0 top-0 bottom-0 bg-purple-500 transition-all duration-300"
-                    style={{ width: `${(elixir.b / MAX_ELIXIR) * 100}%` }}
+                  key={i}
+                  style={{
+                    flex: 1,
+                    borderRight:
+                      i < MAX_ELIXIR - 1
+                        ? "1px solid rgba(255,255,255,0.15)"
+                        : "none",
+                  }}
                 />
-             </div>
-             <span className="text-purple-400 font-bold text-lg mt-1">{elixir.b}/{MAX_ELIXIR}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Elixir Count */}
+          <div
+            style={{
+              minWidth: 45,
+              textAlign: "center",
+              color: "#f0abfc",
+              fontWeight: 900,
+              fontSize: 20,
+              textShadow: "0 0 10px rgba(236, 72, 153, 0.8)",
+            }}
+          >
+            {currentElixir}
+          </div>
         </div>
       </div>
     </div>

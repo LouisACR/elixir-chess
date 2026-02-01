@@ -2,10 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+@import url("https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@700;800;900&display=swap");
+
+html,
+body,
+#root {
   height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
-  overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
-  touch-action: manipulation; /* Improve touch response */
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  font-family: "Nunito", sans-serif;
+  position: fixed;
+  inset: 0;
+}
+
+/* Clash Royale style background */
+.game-bg {
+  background: linear-gradient(
+    180deg,
+    #1a1a2e 0%,
+    #16213e 30%,
+    #0f3460 60%,
+    #1a1a2e 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Glowing elixir bar */
+.elixir-bar {
+  background: linear-gradient(90deg, #7c3aed, #ec4899, #f472b6);
+  box-shadow:
+    0 0 20px rgba(236, 72, 153, 0.6),
+    0 0 40px rgba(124, 58, 237, 0.4);
+  animation: elixir-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes elixir-glow {
+  from {
+    box-shadow:
+      0 0 15px rgba(236, 72, 153, 0.5),
+      0 0 30px rgba(124, 58, 237, 0.3);
+  }
+  to {
+    box-shadow:
+      0 0 25px rgba(236, 72, 153, 0.8),
+      0 0 50px rgba(124, 58, 237, 0.5);
+  }
+}
+
+/* Card glow effect */
+.card-glow {
+  box-shadow:
+    0 4px 15px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.card-glow-active {
+  box-shadow:
+    0 0 20px rgba(251, 191, 36, 0.6),
+    0 4px 15px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Title style */
+.game-title {
+  font-family: "Lilita One", cursive;
+  text-shadow:
+    0 4px 0 #1e3a5f,
+    0 6px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Check pulse animation */
+@keyframes check-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 4px rgba(239, 68, 68, 0.8);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 6px rgba(239, 68, 68, 1),
+      0 0 20px rgba(239, 68, 68, 0.6);
+  }
+}
+
+.check-pulse {
+  animation: check-pulse 0.8s ease-in-out infinite;
 }
