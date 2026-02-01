@@ -21,6 +21,11 @@ export type ConnectionStatus =
   | "connected"
   | "error";
 
+export interface Premove {
+  from: Square;
+  to: Square;
+}
+
 export interface MultiplayerGameState {
   fen: string;
   turn: PlayerColor;
@@ -90,6 +95,10 @@ export function useMultiplayerGame() {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [validMoves, setValidMoves] = useState<string[]>([]);
 
+  // Premove state
+  const [premove, setPremove] = useState<Premove | null>(null);
+  const [premoveValidMoves, setPremoveValidMoves] = useState<string[]>([]);
+
   // Keep chess in sync with game state
   useEffect(() => {
     try {
@@ -98,6 +107,36 @@ export function useMultiplayerGame() {
       console.error("Failed to load FEN:", e);
     }
   }, [gameState.fen]);
+
+  // Execute premove when it becomes our turn
+  useEffect(() => {
+    if (!premove || !playerColor) return;
+    if (gameState.turn !== playerColor) return;
+    if (gameState.status !== "playing") return;
+
+    // Create a fresh chess instance with the current FEN to validate
+    // (don't rely on chessRef which might not be synced yet)
+    const tempChess = new Chess(gameState.fen);
+
+    // Validate that the premove is still legal
+    const moves = tempChess.moves({
+      square: premove.from,
+      verbose: true,
+    });
+    const isValid = moves.some((m) => m.to === premove.to);
+
+    if (isValid) {
+      // Execute the premove
+      const socket = getSocket();
+      if (socket.connected) {
+        socket.emit("MOVE_PIECE", { from: premove.from, to: premove.to });
+      }
+    }
+
+    // Clear premove regardless of validity
+    setPremove(null);
+    setPremoveValidMoves([]);
+  }, [gameState.fen, gameState.turn, gameState.status, premove, playerColor]);
 
   // ============================================
   // Socket Event Handlers
@@ -379,7 +418,7 @@ export function useMultiplayerGame() {
   }, []);
 
   // ============================================
-  // Selection Logic
+  // Selection Logic (with premove support)
   // ============================================
 
   const selectSquare = useCallback(
@@ -390,34 +429,108 @@ export function useMultiplayerGame() {
         return;
       }
 
-      // If we have a selected square and click a valid move target, make the move
-      if (selectedSquare && validMoves.includes(square)) {
-        makeMove(selectedSquare as Square, square as Square);
-        setSelectedSquare(null);
-        setValidMoves([]);
-        return;
-      }
+      const isMyTurnNow = gameState.turn === playerColor;
 
-      // Check if clicking own piece
-      const piece = chessRef.current.get(square as Square);
-      if (
-        piece &&
-        piece.color === playerColor &&
-        gameState.turn === playerColor
-      ) {
-        setSelectedSquare(square);
-        const moves = chessRef.current.moves({
-          square: square as Square,
-          verbose: true,
-        });
-        setValidMoves(moves.map((m) => m.to));
-      } else {
-        setSelectedSquare(null);
-        setValidMoves([]);
+      // === NORMAL MOVE (my turn) ===
+      if (isMyTurnNow) {
+        // Cancel any premove when making a real move
+        if (premove) {
+          setPremove(null);
+          setPremoveValidMoves([]);
+        }
+
+        // If we have a selected square and click a valid move target, make the move
+        if (selectedSquare && validMoves.includes(square)) {
+          makeMove(selectedSquare as Square, square as Square);
+          setSelectedSquare(null);
+          setValidMoves([]);
+          return;
+        }
+
+        // Check if clicking own piece
+        const piece = chessRef.current.get(square as Square);
+        if (piece && piece.color === playerColor) {
+          setSelectedSquare(square);
+          const moves = chessRef.current.moves({
+            square: square as Square,
+            verbose: true,
+          });
+          setValidMoves(moves.map((m) => m.to));
+        } else {
+          setSelectedSquare(null);
+          setValidMoves([]);
+        }
+      }
+      // === PREMOVE (opponent's turn) ===
+      else if (playerColor && gameState.status === "playing") {
+        const piece = chessRef.current.get(square as Square);
+
+        // If we have a selected square for premove
+        if (selectedSquare) {
+          // Check if clicking a target square (any square that's not our own piece)
+          const targetPiece = chessRef.current.get(square as Square);
+          const isOwnPiece = targetPiece && targetPiece.color === playerColor;
+
+          if (!isOwnPiece && premoveValidMoves.includes(square)) {
+            // Set the premove
+            setPremove({
+              from: selectedSquare as Square,
+              to: square as Square,
+            });
+            setSelectedSquare(null);
+            setValidMoves([]);
+            setPremoveValidMoves([]);
+            return;
+          }
+        }
+
+        // Check if clicking own piece to set up premove
+        if (piece && piece.color === playerColor) {
+          // Clear existing premove when selecting a new piece
+          setPremove(null);
+
+          if (selectedSquare === square) {
+            setSelectedSquare(null);
+            setValidMoves([]);
+            setPremoveValidMoves([]);
+          } else {
+            setSelectedSquare(square);
+            // For premove, show all possible moves (we'll validate when executing)
+            const moves = chessRef.current.moves({
+              square: square as Square,
+              verbose: true,
+            });
+            const moveTargets = moves.map((m) => m.to);
+            setValidMoves([]);
+            setPremoveValidMoves(moveTargets);
+          }
+        } else if (!piece || piece.color !== playerColor) {
+          // Clicking empty square or opponent piece - cancel premove selection
+          setSelectedSquare(null);
+          setValidMoves([]);
+          setPremoveValidMoves([]);
+        }
       }
     },
-    [selectedSquare, validMoves, playerColor, gameState.turn, makeMove],
+    [
+      selectedSquare,
+      validMoves,
+      premoveValidMoves,
+      playerColor,
+      gameState.turn,
+      gameState.status,
+      makeMove,
+      premove,
+    ],
   );
+
+  // Cancel premove
+  const cancelPremove = useCallback(() => {
+    setPremove(null);
+    setPremoveValidMoves([]);
+    setSelectedSquare(null);
+    setValidMoves([]);
+  }, []);
 
   // ============================================
   // Derived State
@@ -451,6 +564,11 @@ export function useMultiplayerGame() {
     selectedSquare,
     validMoves,
     selectSquare,
+
+    // Premove
+    premove,
+    premoveValidMoves,
+    cancelPremove,
 
     // Actions
     placePiece,

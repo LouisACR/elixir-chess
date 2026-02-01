@@ -2,21 +2,28 @@ import React, { useMemo } from "react";
 import { Square } from "./Square";
 import { Piece } from "./Piece";
 import { Chess } from "chess.js";
+import type { Premove } from "../hooks/useMultiplayerGame";
 
 interface BoardProps {
   game: Chess;
   selectedSquare?: string | null;
   validMoves?: string[];
+  premoveValidMoves?: string[];
+  premove?: Premove | null;
   onSquareClick?: (square: string) => void;
   flipped?: boolean;
+  allowPremoveDrag?: boolean;
 }
 
 export const Board: React.FC<BoardProps> = ({
   game,
   selectedSquare,
   validMoves = [],
+  premoveValidMoves = [],
+  premove,
   onSquareClick,
   flipped = false,
+  allowPremoveDrag = false,
 }) => {
   const board = game.board();
   const turn = game.turn();
@@ -57,6 +64,14 @@ export const Board: React.FC<BoardProps> = ({
           const isSelected = selectedSquare === squareId;
           const isValidMove = validMoves.includes(squareId);
           const isKingInCheck = kingInCheckSquare === squareId;
+          const isPremoveFrom = premove?.from === squareId;
+          const isPremoveTo = premove?.to === squareId;
+          const isPremoveValid = premoveValidMoves.includes(squareId);
+
+          // Allow dragging own pieces, or during premove selection
+          const canDrag =
+            piece?.color === turn ||
+            (allowPremoveDrag && piece?.color !== turn);
 
           return (
             <Square
@@ -66,14 +81,13 @@ export const Board: React.FC<BoardProps> = ({
               isSelected={isSelected}
               isValidDrop={isValidMove}
               isKingInCheck={isKingInCheck}
+              isPremoveFrom={isPremoveFrom}
+              isPremoveTo={isPremoveTo}
+              isPremoveValid={isPremoveValid}
               onClick={() => onSquareClick?.(squareId)}
             >
               {piece && (
-                <Piece
-                  piece={piece}
-                  square={squareId}
-                  canDrag={piece.color === turn}
-                />
+                <Piece piece={piece} square={squareId} canDrag={canDrag} />
               )}
             </Square>
           );

@@ -76,6 +76,9 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
     selectedSquare,
     validMoves,
     selectSquare,
+    premove,
+    premoveValidMoves,
+    cancelPremove,
     placePiece,
     makeMove,
     restartGame,
@@ -165,34 +168,21 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
 
   const handleSquareClick = useCallback(
     (square: string) => {
-      if (!isMyTurn) return;
+      // All logic (normal moves and premoves) is handled by selectSquare
+      selectSquare(square);
+    },
+    [selectSquare],
+  );
 
-      const piece = chess.get(square as Square);
-
-      if (selectedSquare && validMoves.includes(square)) {
-        makeMove(selectedSquare as Square, square as Square);
-        return;
-      }
-
-      if (piece && piece.color === playerColor) {
-        if (selectedSquare === square) {
-          selectSquare(null);
-        } else {
-          selectSquare(square);
-        }
-      } else {
-        selectSquare(null);
+  // Handle right-click to cancel premove
+  const handleBoardRightClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (premove) {
+        cancelPremove();
       }
     },
-    [
-      chess,
-      selectedSquare,
-      validMoves,
-      makeMove,
-      selectSquare,
-      playerColor,
-      isMyTurn,
-    ],
+    [premove, cancelPremove],
   );
 
   const handleBack = useCallback(() => {
@@ -256,13 +246,18 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
           playerPerspective={playerColor || "w"}
         />
 
-        <div className="flex-1 flex items-center justify-center p-2 min-h-0">
+        <div
+          className="flex-1 flex items-center justify-center p-2 min-h-0"
+          onContextMenu={handleBoardRightClick}
+        >
           <Board
             game={chess}
             selectedSquare={selectedSquare}
             validMoves={displayedValidMoves}
             onSquareClick={handleSquareClick}
             flipped={playerColor === "b"}
+            premove={premove}
+            premoveValidMoves={premoveValidMoves}
           />
         </div>
 
