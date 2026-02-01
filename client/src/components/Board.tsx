@@ -2,14 +2,15 @@ import React, { useMemo } from "react";
 import { Square } from "./Square";
 import { Piece } from "./Piece";
 import { Chess } from "chess.js";
-import type { Premove } from "../hooks/useMultiplayerGame";
+import type { Premove, GhostPiece } from "../hooks/useMultiplayerGame";
 
 interface BoardProps {
   game: Chess;
   selectedSquare?: string | null;
   validMoves?: string[];
   premoveValidMoves?: string[];
-  premove?: Premove | null;
+  premoves?: Premove[];
+  ghostPieces?: GhostPiece[];
   onSquareClick?: (square: string) => void;
   flipped?: boolean;
   allowPremoveDrag?: boolean;
@@ -20,7 +21,8 @@ export const Board: React.FC<BoardProps> = ({
   selectedSquare,
   validMoves = [],
   premoveValidMoves = [],
-  premove,
+  premoves = [],
+  ghostPieces = [],
   onSquareClick,
   flipped = false,
   allowPremoveDrag = false,
@@ -40,6 +42,22 @@ export const Board: React.FC<BoardProps> = ({
       });
     });
   }
+
+  // Create a set of premove source/destination squares for quick lookup
+  const premoveSquares = useMemo(() => {
+    const fromSquares = new Set(premoves.map((pm) => pm.from));
+    const toSquares = new Set(premoves.map((pm) => pm.to));
+    return { fromSquares, toSquares };
+  }, [premoves]);
+
+  // Create a map of ghost pieces by square
+  const ghostPieceMap = useMemo(() => {
+    const map = new Map<string, GhostPiece>();
+    for (const ghost of ghostPieces) {
+      map.set(ghost.square, ghost);
+    }
+    return map;
+  }, [ghostPieces]);
 
   // Create flipped board view if needed
   const displayBoard = useMemo(() => {
@@ -64,9 +82,15 @@ export const Board: React.FC<BoardProps> = ({
           const isSelected = selectedSquare === squareId;
           const isValidMove = validMoves.includes(squareId);
           const isKingInCheck = kingInCheckSquare === squareId;
-          const isPremoveFrom = premove?.from === squareId;
-          const isPremoveTo = premove?.to === squareId;
+          const isPremoveFrom = premoveSquares.fromSquares.has(squareId);
+          const isPremoveTo = premoveSquares.toSquares.has(squareId);
           const isPremoveValid = premoveValidMoves.includes(squareId);
+
+          // Check if piece has been premoved away (show as transparent)
+          const isPiecePremoved = isPremoveFrom && piece;
+
+          // Check for ghost piece at this square
+          const ghostPiece = ghostPieceMap.get(squareId);
 
           // Allow dragging own pieces, or during premove selection
           const canDrag =
@@ -86,8 +110,23 @@ export const Board: React.FC<BoardProps> = ({
               isPremoveValid={isPremoveValid}
               onClick={() => onSquareClick?.(squareId)}
             >
+              {/* Original piece (transparent if premoved) */}
               {piece && (
-                <Piece piece={piece} square={squareId} canDrag={canDrag} />
+                <Piece
+                  piece={piece}
+                  square={squareId}
+                  canDrag={canDrag && !isPiecePremoved}
+                  isGhost={!!isPiecePremoved}
+                />
+              )}
+              {/* Ghost piece at premove destination */}
+              {ghostPiece && !piece && (
+                <Piece
+                  piece={ghostPiece.piece}
+                  square={squareId}
+                  canDrag={false}
+                  isGhost={true}
+                />
               )}
             </Square>
           );

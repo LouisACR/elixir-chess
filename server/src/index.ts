@@ -197,6 +197,26 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("SET_PREMOVES", ({ premoves }) => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.setPremoves(socket.id, premoves);
+  });
+
+  socket.on("CLEAR_PREMOVES", () => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.clearPremoves(socket.id);
+  });
+
   socket.on("RESTART_GAME", () => {
     const roomId = playerRooms.get(socket.id);
     if (!roomId) return;

@@ -76,9 +76,10 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
     selectedSquare,
     validMoves,
     selectSquare,
-    premove,
+    premoves,
     premoveValidMoves,
-    cancelPremove,
+    ghostPieces,
+    cancelPremoves,
     placePiece,
     makeMove,
     restartGame,
@@ -174,15 +175,15 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
     [selectSquare],
   );
 
-  // Handle right-click to cancel premove
+  // Handle right-click to cancel premoves
   const handleBoardRightClick = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      if (premove) {
-        cancelPremove();
+      if (premoves.length > 0) {
+        cancelPremoves();
       }
     },
-    [premove, cancelPremove],
+    [premoves, cancelPremoves],
   );
 
   const handleBack = useCallback(() => {
@@ -256,8 +257,9 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
             validMoves={displayedValidMoves}
             onSquareClick={handleSquareClick}
             flipped={playerColor === "b"}
-            premove={premove}
+            premoves={premoves}
             premoveValidMoves={premoveValidMoves}
+            ghostPieces={ghostPieces}
           />
         </div>
 

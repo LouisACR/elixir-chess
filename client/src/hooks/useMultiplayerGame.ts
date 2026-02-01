@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Chess, type Square } from "chess.js";
 import type {
   PlayerColor,
@@ -7,9 +7,14 @@ import type {
   GameStatus,
   PlayerView,
   ElixirGainEvent,
+  Premove,
+  Piece,
 } from "@elixir-chess/shared";
 import { STARTING_ELIXIR, INITIAL_TIME, HAND_SIZE } from "@elixir-chess/shared";
 import { getSocket, connectSocket, disconnectSocket } from "../services/socket";
+
+// Re-export for convenience
+export type { Premove } from "@elixir-chess/shared";
 
 // ============================================
 // Types
@@ -21,9 +26,10 @@ export type ConnectionStatus =
   | "connected"
   | "error";
 
-export interface Premove {
-  from: Square;
-  to: Square;
+// Ghost piece represents a piece shown at premove destination
+export interface GhostPiece {
+  square: string;
+  piece: Piece;
 }
 
 // Helper to get all theoretically possible squares a piece could move to
@@ -147,6 +153,7 @@ export interface MultiplayerGameState {
   history: string[];
   myHand: CardHand;
   opponentCardCount: number;
+  premoves: Premove[];
 }
 
 interface OptimisticAction {
@@ -174,6 +181,7 @@ const INITIAL_MULTIPLAYER_STATE: MultiplayerGameState = {
   history: [],
   myHand: EMPTY_HAND,
   opponentCardCount: HAND_SIZE,
+  premoves: [],
 };
 
 // ============================================
@@ -206,8 +214,7 @@ export function useMultiplayerGame() {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [validMoves, setValidMoves] = useState<string[]>([]);
 
-  // Premove state
-  const [premove, setPremove] = useState<Premove | null>(null);
+  // Premove selection state (for building the next premove)
   const [premoveValidMoves, setPremoveValidMoves] = useState<string[]>([]);
 
   // Keep chess in sync with game state
@@ -219,35 +226,53 @@ export function useMultiplayerGame() {
     }
   }, [gameState.fen]);
 
-  // Execute premove when it becomes our turn
-  useEffect(() => {
-    if (!premove || !playerColor) return;
-    if (gameState.turn !== playerColor) return;
-    if (gameState.status !== "playing") return;
+  // Compute ghost pieces from premoves
+  // This simulates the board state after all premoves are applied
+  const ghostPieces = useMemo((): GhostPiece[] => {
+    if (!playerColor || gameState.premoves.length === 0) return [];
 
-    // Create a fresh chess instance with the current FEN to validate
-    // (don't rely on chessRef which might not be synced yet)
+    const ghosts: GhostPiece[] = [];
     const tempChess = new Chess(gameState.fen);
 
-    // Validate that the premove is still legal
-    const moves = tempChess.moves({
-      square: premove.from,
-      verbose: true,
-    });
-    const isValid = moves.some((m) => m.to === premove.to);
+    // Track which squares have been "vacated" by premoves
+    const vacatedSquares = new Set<string>();
 
-    if (isValid) {
-      // Execute the premove
-      const socket = getSocket();
-      if (socket.connected) {
-        socket.emit("MOVE_PIECE", { from: premove.from, to: premove.to });
+    for (const premove of gameState.premoves) {
+      const piece = tempChess.get(premove.from as Square);
+      if (piece && piece.color === playerColor) {
+        // Try to simulate the move
+        try {
+          tempChess.move({
+            from: premove.from as Square,
+            to: premove.to as Square,
+            promotion: "q",
+          });
+          vacatedSquares.add(premove.from);
+        } catch {
+          // If move fails in simulation, still show ghost at destination
+          // The server will validate and clear if invalid
+          ghosts.push({
+            square: premove.to,
+            piece: { type: piece.type, color: piece.color },
+          });
+          vacatedSquares.add(premove.from);
+        }
       }
     }
 
-    // Clear premove regardless of validity
-    setPremove(null);
-    setPremoveValidMoves([]);
-  }, [gameState.fen, gameState.turn, gameState.status, premove, playerColor]);
+    // Add ghosts for the final positions after all premoves
+    for (const premove of gameState.premoves) {
+      const originalPiece = chessRef.current.get(premove.from as Square);
+      if (originalPiece && originalPiece.color === playerColor) {
+        ghosts.push({
+          square: premove.to,
+          piece: { type: originalPiece.type, color: originalPiece.color },
+        });
+      }
+    }
+
+    return ghosts;
+  }, [gameState.fen, gameState.premoves, playerColor]);
 
   // ============================================
   // Socket Event Handlers
@@ -370,6 +395,14 @@ export function useMultiplayerGame() {
       setTimeout(() => setError(null), 5000);
     };
 
+    const handlePremovesCleared = ({ reason }: { reason: string }) => {
+      console.log(`Premoves cleared: ${reason}`);
+      // Clear local selection state
+      setSelectedSquare(null);
+      setValidMoves([]);
+      setPremoveValidMoves([]);
+    };
+
     const handleDisconnect = () => {
       setConnectionStatus("disconnected");
     };
@@ -387,6 +420,7 @@ export function useMultiplayerGame() {
     socket.on("ACTION_REJECTED", handleActionRejected);
     socket.on("GAME_OVER", handleGameOver);
     socket.on("PLAYER_DISCONNECTED", handlePlayerDisconnected);
+    socket.on("PREMOVES_CLEARED", handlePremovesCleared);
     socket.on("ERROR", handleError);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect", handleConnect);
@@ -401,6 +435,7 @@ export function useMultiplayerGame() {
       socket.off("ACTION_REJECTED", handleActionRejected);
       socket.off("GAME_OVER", handleGameOver);
       socket.off("PLAYER_DISCONNECTED", handlePlayerDisconnected);
+      socket.off("PREMOVES_CLEARED", handlePremovesCleared);
       socket.off("ERROR", handleError);
       socket.off("disconnect", handleDisconnect);
       socket.off("connect", handleConnect);
@@ -529,8 +564,31 @@ export function useMultiplayerGame() {
   }, []);
 
   // ============================================
-  // Selection Logic (with premove support)
+  // Selection Logic (with multiple premove support)
   // ============================================
+
+  // Add a premove to the queue
+  const addPremove = useCallback(
+    (from: string, to: string) => {
+      const socket = getSocket();
+      if (!socket.connected || !playerColor) return;
+
+      const newPremoves = [...gameState.premoves, { from, to }];
+      socket.emit("SET_PREMOVES", { premoves: newPremoves });
+    },
+    [playerColor, gameState.premoves],
+  );
+
+  // Cancel all premoves
+  const cancelPremoves = useCallback(() => {
+    const socket = getSocket();
+    if (socket.connected) {
+      socket.emit("CLEAR_PREMOVES");
+    }
+    setSelectedSquare(null);
+    setValidMoves([]);
+    setPremoveValidMoves([]);
+  }, []);
 
   const selectSquare = useCallback(
     (square: string | null) => {
@@ -547,14 +605,14 @@ export function useMultiplayerGame() {
       const piece = chessRef.current.get(square as Square);
       const isOwnPiece = piece && piece.color === playerColor;
 
+      // Also check if there's a "ghost" piece here (from premove)
+      const lastPremoveToHere = gameState.premoves.find(
+        (pm) => pm.to === square,
+      );
+      const hasGhostPiece = lastPremoveToHere !== undefined;
+
       // === DURING MY TURN ===
       if (isMyTurnNow) {
-        // Cancel any premove when interacting during my turn
-        if (premove) {
-          setPremove(null);
-          setPremoveValidMoves([]);
-        }
-
         // If we have a selected square and click a valid move target, make the move
         if (selectedSquare && validMoves.includes(square)) {
           makeMove(selectedSquare as Square, square as Square);
@@ -587,21 +645,55 @@ export function useMultiplayerGame() {
       else {
         // If we have a piece selected for premove and click a valid premove target
         if (selectedSquare && premoveValidMoves.includes(square)) {
-          // Set the premove
-          setPremove({
-            from: selectedSquare as Square,
-            to: square as Square,
-          });
+          // Add the premove
+          addPremove(selectedSquare, square);
           setSelectedSquare(null);
           setValidMoves([]);
           setPremoveValidMoves([]);
           return;
         }
 
+        // Check if clicking on a ghost piece (piece at premove destination)
+        if (hasGhostPiece) {
+          // Select the ghost piece for chaining premoves
+          const originalFrom = lastPremoveToHere.from;
+          const originalPiece = chessRef.current.get(originalFrom as Square);
+
+          if (originalPiece && originalPiece.color === playerColor) {
+            if (selectedSquare === square) {
+              setSelectedSquare(null);
+              setValidMoves([]);
+              setPremoveValidMoves([]);
+            } else {
+              setSelectedSquare(square);
+              setValidMoves([]);
+              // Show premove targets from this ghost position
+              const targets = getPremoveTargets(
+                chessRef.current,
+                originalFrom as Square,
+                playerColor,
+              );
+              // Filter out the current position since piece is "moving" from ghost pos
+              setPremoveValidMoves(targets.filter((t) => t !== square));
+            }
+            return;
+          }
+        }
+
         // Click on own piece: select it for premove
         if (isOwnPiece) {
-          // Clear existing premove when selecting a new piece
-          setPremove(null);
+          // Check if this piece hasn't already been premoved away
+          const isPremoved = gameState.premoves.some(
+            (pm) => pm.from === square,
+          );
+
+          if (isPremoved) {
+            // Piece already has premove, can't select original position
+            setSelectedSquare(null);
+            setValidMoves([]);
+            setPremoveValidMoves([]);
+            return;
+          }
 
           if (selectedSquare === square) {
             // Deselect
@@ -611,7 +703,7 @@ export function useMultiplayerGame() {
           } else {
             setSelectedSquare(square);
             setValidMoves([]);
-            // For premove, show ALL theoretically possible squares (not just currently legal)
+            // For premove, show ALL theoretically possible squares
             const targets = getPremoveTargets(
               chessRef.current,
               square as Square,
@@ -634,18 +726,11 @@ export function useMultiplayerGame() {
       playerColor,
       gameState.turn,
       gameState.status,
+      gameState.premoves,
       makeMove,
-      premove,
+      addPremove,
     ],
   );
-
-  // Cancel premove
-  const cancelPremove = useCallback(() => {
-    setPremove(null);
-    setPremoveValidMoves([]);
-    setSelectedSquare(null);
-    setValidMoves([]);
-  }, []);
 
   // ============================================
   // Derived State
@@ -681,9 +766,10 @@ export function useMultiplayerGame() {
     selectSquare,
 
     // Premove
-    premove,
+    premoves: gameState.premoves,
     premoveValidMoves,
-    cancelPremove,
+    ghostPieces,
+    cancelPremoves,
 
     // Actions
     placePiece,

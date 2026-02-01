@@ -85,6 +85,7 @@ export interface PlayerView {
     history: string[];
     myHand: CardHand;
     opponentCardCount: number;
+    premoves: Premove[];
   };
 }
 
@@ -99,6 +100,15 @@ export interface ElixirGainEvent {
 }
 
 // ============================================
+// Premove Types
+// ============================================
+
+export interface Premove {
+  from: string;
+  to: string;
+}
+
+// ============================================
 // Socket Events - Client to Server
 // ============================================
 
@@ -107,6 +117,8 @@ export interface ClientToServerEvents {
   JOIN_ROOM: (data: { roomId: string }) => void;
   PLACE_PIECE: (data: { type: PieceType; square: string }) => void;
   MOVE_PIECE: (data: { from: string; to: string }) => void;
+  SET_PREMOVES: (data: { premoves: Premove[] }) => void;
+  CLEAR_PREMOVES: () => void;
   RESTART_GAME: () => void;
   LEAVE_ROOM: () => void;
 }
@@ -131,6 +143,7 @@ export interface ServerToClientEvents {
   GAME_OVER: (data: { status: GameStatus; winner?: PlayerColor }) => void;
   PLAYER_DISCONNECTED: (data: { playerColor: PlayerColor }) => void;
   PLAYER_RECONNECTED: (data: { playerColor: PlayerColor }) => void;
+  PREMOVES_CLEARED: (data: { reason: string }) => void;
   ERROR: (data: { message: string }) => void;
 }
 

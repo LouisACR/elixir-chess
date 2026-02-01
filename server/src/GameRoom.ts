@@ -7,6 +7,7 @@ import type {
   PlayerView,
   ElixirGainEvent,
   GameStatus,
+  Premove,
 } from "@elixir-chess/shared";
 import {
   PIECE_COSTS,
@@ -158,6 +159,12 @@ export class GameRoom {
   private gameState: GameState;
   private timerInterval: NodeJS.Timeout | null = null;
   private emitter: RoomEventEmitter;
+
+  // Premove queues for each player
+  private premoves: Record<PlayerColor, Premove[]> = {
+    w: [],
+    b: [],
+  };
 
   constructor(roomId: string, emitter: RoomEventEmitter) {
     this.roomId = roomId;
@@ -506,6 +513,9 @@ export class GameRoom {
     this.chess = new Chess(INITIAL_FEN);
     this.gameState = this.createInitialGameState();
     this.gameState.status = "playing";
+    
+    // Clear premoves
+    this.premoves = { w: [], b: [] };
 
     this.startTimers();
 
@@ -549,8 +559,99 @@ export class GameRoom {
         history: this.gameState.history,
         myHand: this.gameState.hands[color],
         opponentCardCount: opponentHand.cards.length,
+        premoves: this.premoves[color],
       },
     };
+  }
+
+  // ============================================
+  // Premove Management
+  // ============================================
+
+  setPremoves(socketId: string, premoves: Premove[]): void {
+    const playerColor = this.getPlayerColor(socketId);
+    if (!playerColor) return;
+    if (this.gameState.status !== "playing") return;
+
+    this.premoves[playerColor] = premoves;
+
+    // Notify the player of their updated premoves
+    if (this.players[playerColor]) {
+      this.emitter.emitToPlayer(
+        this.players[playerColor]!,
+        "GAME_STATE_UPDATE",
+        this.getPlayerView(playerColor),
+      );
+    }
+  }
+
+  clearPremoves(socketId: string): void {
+    const playerColor = this.getPlayerColor(socketId);
+    if (!playerColor) return;
+
+    this.premoves[playerColor] = [];
+
+    if (this.players[playerColor]) {
+      this.emitter.emitToPlayer(
+        this.players[playerColor]!,
+        "GAME_STATE_UPDATE",
+        this.getPlayerView(playerColor),
+      );
+    }
+  }
+
+  private clearPremovesForPlayer(color: PlayerColor, reason: string): void {
+    this.premoves[color] = [];
+
+    if (this.players[color]) {
+      this.emitter.emitToPlayer(this.players[color]!, "PREMOVES_CLEARED", {
+        reason,
+      });
+    }
+  }
+
+  private tryExecutePremove(): boolean {
+    const currentTurn = this.gameState.turn;
+    const premoveQueue = this.premoves[currentTurn];
+
+    if (premoveQueue.length === 0) return false;
+
+    const premove = premoveQueue[0];
+
+    // Validate the premove is still legal
+    try {
+      const move = this.chess.move({
+        from: premove.from as Square,
+        to: premove.to as Square,
+        promotion: "q",
+      });
+
+      if (!move) {
+        // Invalid premove - clear all premoves for this player
+        this.clearPremovesForPlayer(currentTurn, "Invalid premove");
+        return false;
+      }
+
+      // Remove the executed premove from queue
+      premoveQueue.shift();
+
+      // Update game state
+      this.gameState.fen = this.chess.fen();
+      this.gameState.turn = this.chess.turn() as PlayerColor;
+      this.gameState.history = this.chess.history();
+
+      // Check for game end
+      this.checkGameEnd();
+
+      // Broadcast state update
+      this.broadcastGameState();
+
+      return true;
+    } catch {
+      // Invalid premove - clear all premoves
+      this.clearPremovesForPlayer(currentTurn, "Invalid premove");
+      return false;
+    }
   }
 
   private broadcastGameState(gainEvent?: ElixirGainEvent): void {
@@ -567,6 +668,14 @@ export class GameRoom {
         ...view,
         gainEvent: gainEvent?.player === "b" ? gainEvent : undefined,
       });
+    }
+
+    // Try to execute premove for the player whose turn it is
+    // Use setTimeout to allow the state update to be processed first
+    if (this.gameState.status === "playing") {
+      setTimeout(() => {
+        this.tryExecutePremove();
+      }, 50);
     }
   }
 }

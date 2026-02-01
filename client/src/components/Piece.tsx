@@ -9,6 +9,7 @@ interface PieceProps {
   piece: PieceModel;
   square: string; // e.g. 'e2'
   canDrag?: boolean;
+  isGhost?: boolean; // For premove ghost pieces (transparent)
   className?: string;
 }
 
@@ -16,18 +17,19 @@ export const Piece: React.FC<PieceProps> = ({
   piece,
   square,
   canDrag = true,
+  isGhost = false,
   className,
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
-      id: `piece-${square}`,
+      id: `piece-${square}${isGhost ? "-ghost" : ""}`,
       data: {
         from: square,
         type: piece.type,
         color: piece.color,
         source: "board",
       },
-      disabled: !canDrag,
+      disabled: !canDrag || isGhost,
     });
 
   return (
@@ -38,8 +40,9 @@ export const Piece: React.FC<PieceProps> = ({
       {...attributes}
       className={clsx(
         "w-full h-full flex items-center justify-center p-1 touch-none",
-        isDragging ? "opacity-0 z-50" : "opacity-100 z-auto",
-        canDrag ? "cursor-grab" : "cursor-default",
+        isDragging ? "opacity-0 z-50" : isGhost ? "opacity-40" : "opacity-100",
+        "z-auto",
+        canDrag && !isGhost ? "cursor-grab" : "cursor-default",
         className,
       )}
     >
