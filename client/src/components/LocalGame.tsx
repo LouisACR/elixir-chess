@@ -14,6 +14,7 @@ import { useElixirChess } from "../hooks/useElixirChess";
 import { Board } from "./Board";
 import { Shop } from "./Shop";
 import { TopHUD, BottomHUD } from "./GameHUD";
+import { GameOverOverlay } from "./GameOverOverlay";
 import { PieceIcon } from "./PieceIcons";
 import { getValidPlacementSquares } from "../utils/chess";
 import type { DragData, PieceType } from "@elixir-chess/shared";
@@ -194,6 +195,14 @@ export function LocalGame({ onBack }: LocalGameProps) {
         />
 
         <Shop turn={gameState.turn} elixir={currentElixir} hand={currentHand} />
+
+        {/* Game Over Overlay */}
+        <GameOverOverlay
+          status={gameState.status}
+          winner={gameState.winner}
+          onRestart={resetGame}
+          onBack={onBack}
+        />
 
         <DragOverlay dropAnimation={DROP_ANIMATION}>
           {activeDragData && (

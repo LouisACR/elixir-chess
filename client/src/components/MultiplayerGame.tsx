@@ -14,6 +14,7 @@ import { useMultiplayerGame } from "../hooks/useMultiplayerGame";
 import { Board } from "./Board";
 import { Shop } from "./Shop";
 import { TopHUD, BottomHUD } from "./GameHUD";
+import { GameOverOverlay } from "./GameOverOverlay";
 import { PieceIcon } from "./PieceIcons";
 import { LobbyScreen } from "./Lobby";
 import { getValidPlacementSquares } from "../utils/chess";
@@ -277,6 +278,16 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
           turn={playerColor || "w"}
           elixir={myElixir}
           hand={gameState.myHand}
+        />
+
+        {/* Game Over Overlay */}
+        <GameOverOverlay
+          status={gameState.status}
+          winner={gameState.winner}
+          playerColor={playerColor || undefined}
+          onRestart={restartGame}
+          onBack={handleBack}
+          isMultiplayer={true}
         />
 
         <DragOverlay dropAnimation={DROP_ANIMATION}>
