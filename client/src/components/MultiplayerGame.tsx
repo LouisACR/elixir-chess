@@ -15,8 +15,14 @@ import { Board } from "./Board";
 import { Shop } from "./Shop";
 import { TopHUD, BottomHUD } from "./GameHUD";
 import { GameOverOverlay } from "./GameOverOverlay";
+import {
+  GameControlButtons,
+  DrawOfferPopup,
+  DrawDeclinedToast,
+} from "./GameControls";
 import { PieceIcon } from "./PieceIcons";
 import { LobbyScreen } from "./Lobby";
+import { Chat } from "./Chat";
 import { getValidPlacementSquares } from "../utils/chess";
 import type { DragData, PieceType, CardHand } from "@elixir-chess/shared";
 
@@ -84,9 +90,15 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
     placePiece,
     makeMove,
     restartGame,
+    resign,
+    offerDraw,
+    respondToDraw,
+    pendingDrawOffer,
+    drawDeclined,
   } = useMultiplayerGame();
 
   const [activeDragData, setActiveDragData] = useState<DragData | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(MouseSensor, MOUSE_SENSOR_CONFIG),
@@ -239,6 +251,25 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
           </div>
         </div>
 
+        {/* Game Control Buttons (Resign & Draw) */}
+        <GameControlButtons
+          onResign={resign}
+          onOfferDraw={offerDraw}
+          isPlaying={gameState.status === "playing"}
+        />
+
+        {/* Draw Offer Popup */}
+        {pendingDrawOffer && pendingDrawOffer !== playerColor && (
+          <DrawOfferPopup
+            from={pendingDrawOffer}
+            onAccept={() => respondToDraw(true)}
+            onDecline={() => respondToDraw(false)}
+          />
+        )}
+
+        {/* Draw Declined Toast */}
+        <DrawDeclinedToast visible={drawDeclined} />
+
         <TopHUD
           gameState={hudGameState}
           timers={gameState.timers}
@@ -278,6 +309,13 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
           turn={playerColor || "w"}
           elixir={myElixir}
           hand={gameState.myHand}
+        />
+
+        {/* Chat */}
+        <Chat
+          playerColor={playerColor}
+          isOpen={isChatOpen}
+          onToggle={() => setIsChatOpen(!isChatOpen)}
         />
 
         {/* Game Over Overlay */}

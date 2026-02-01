@@ -9,6 +9,7 @@ import type {
   ElixirGainEvent,
   Premove,
   Piece,
+  TimeControlType,
 } from "@elixir-chess/shared";
 import { STARTING_ELIXIR, INITIAL_TIME, HAND_SIZE } from "@elixir-chess/shared";
 import { getSocket, connectSocket, disconnectSocket } from "../services/socket";
@@ -287,6 +288,12 @@ export function useMultiplayerGame() {
   const [playerColor, setPlayerColor] = useState<PlayerColor | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Draw offer state
+  const [pendingDrawOffer, setPendingDrawOffer] = useState<PlayerColor | null>(
+    null,
+  );
+  const [drawDeclined, setDrawDeclined] = useState<boolean>(false);
+
   // Game state
   const [gameState, setGameState] = useState<MultiplayerGameState>(
     INITIAL_MULTIPLAYER_STATE,
@@ -552,6 +559,17 @@ export function useMultiplayerGame() {
       setPremoveValidMoves([]);
     };
 
+    const handleDrawOffered = ({ from }: { from: PlayerColor }) => {
+      setPendingDrawOffer(from);
+      setDrawDeclined(false);
+    };
+
+    const handleDrawDeclined = () => {
+      setPendingDrawOffer(null);
+      setDrawDeclined(true);
+      setTimeout(() => setDrawDeclined(false), 3000);
+    };
+
     const handleDisconnect = () => {
       setConnectionStatus("disconnected");
     };
@@ -570,6 +588,8 @@ export function useMultiplayerGame() {
     socket.on("GAME_OVER", handleGameOver);
     socket.on("PLAYER_DISCONNECTED", handlePlayerDisconnected);
     socket.on("PREMOVES_CLEARED", handlePremovesCleared);
+    socket.on("DRAW_OFFERED", handleDrawOffered);
+    socket.on("DRAW_DECLINED", handleDrawDeclined);
     socket.on("ERROR", handleError);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect", handleConnect);
@@ -585,6 +605,8 @@ export function useMultiplayerGame() {
       socket.off("GAME_OVER", handleGameOver);
       socket.off("PLAYER_DISCONNECTED", handlePlayerDisconnected);
       socket.off("PREMOVES_CLEARED", handlePremovesCleared);
+      socket.off("DRAW_OFFERED", handleDrawOffered);
+      socket.off("DRAW_DECLINED", handleDrawDeclined);
       socket.off("ERROR", handleError);
       socket.off("disconnect", handleDisconnect);
       socket.off("connect", handleConnect);
@@ -619,10 +641,10 @@ export function useMultiplayerGame() {
   // Room Actions
   // ============================================
 
-  const createRoom = useCallback(() => {
+  const createRoom = useCallback((timeControl: TimeControlType = "blitz") => {
     const socket = getSocket();
     if (socket.connected) {
-      socket.emit("CREATE_ROOM");
+      socket.emit("CREATE_ROOM", { timeControl });
     }
   }, []);
 
@@ -709,6 +731,27 @@ export function useMultiplayerGame() {
     const socket = getSocket();
     if (socket.connected) {
       socket.emit("RESTART_GAME");
+    }
+  }, []);
+
+  const resign = useCallback(() => {
+    const socket = getSocket();
+    if (socket.connected) {
+      socket.emit("RESIGN");
+    }
+  }, []);
+
+  const offerDraw = useCallback(() => {
+    const socket = getSocket();
+    if (socket.connected) {
+      socket.emit("OFFER_DRAW");
+    }
+  }, []);
+
+  const respondToDraw = useCallback((accept: boolean) => {
+    const socket = getSocket();
+    if (socket.connected) {
+      socket.emit("RESPOND_DRAW", { accept });
     }
   }, []);
 
@@ -930,5 +973,12 @@ export function useMultiplayerGame() {
     placePiece,
     makeMove,
     restartGame,
+
+    // Resign & Draw
+    resign,
+    offerDraw,
+    respondToDraw,
+    pendingDrawOffer,
+    drawDeclined,
   };
 }

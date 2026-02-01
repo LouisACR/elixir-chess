@@ -5,7 +5,9 @@ import cors from "cors";
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
+  TimeControlType,
 } from "@elixir-chess/shared";
+import { TIME_CONTROLS } from "@elixir-chess/shared";
 import { GameRoom } from "./GameRoom.js";
 
 const PORT = process.env.PORT || 3001;
@@ -79,7 +81,12 @@ function cleanupRoom(roomId: string): void {
 io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
-  socket.on("CREATE_ROOM", () => {
+  socket.on("CREATE_ROOM", ({ timeControl }) => {
+    // Validate time control
+    const validTimeControl: TimeControlType = TIME_CONTROLS[timeControl]
+      ? timeControl
+      : "blitz";
+
     // Leave any existing room
     const existingRoomId = playerRooms.get(socket.id);
     if (existingRoomId) {
@@ -97,7 +104,7 @@ io.on("connection", (socket) => {
       roomId = generateRoomId();
     }
 
-    const room = new GameRoom(roomId, createEmitter(roomId));
+    const room = new GameRoom(roomId, createEmitter(roomId), validTimeControl);
     const playerColor = room.addPlayer(socket.id);
 
     if (playerColor) {
@@ -105,8 +112,14 @@ io.on("connection", (socket) => {
       playerRooms.set(socket.id, roomId);
       socket.join(roomId);
 
-      socket.emit("ROOM_CREATED", { roomId, playerColor });
-      console.log(`Room ${roomId} created by ${socket.id} as ${playerColor}`);
+      socket.emit("ROOM_CREATED", {
+        roomId,
+        playerColor,
+        timeControl: validTimeControl,
+      });
+      console.log(
+        `Room ${roomId} created by ${socket.id} as ${playerColor} (${validTimeControl})`,
+      );
     }
   });
 
@@ -140,7 +153,11 @@ io.on("connection", (socket) => {
       playerRooms.set(socket.id, room.roomId);
       socket.join(room.roomId);
 
-      socket.emit("ROOM_JOINED", { roomId: room.roomId, playerColor });
+      socket.emit("ROOM_JOINED", {
+        roomId: room.roomId,
+        playerColor,
+        timeControl: room.timeControl,
+      });
       console.log(
         `Player ${socket.id} joined room ${room.roomId} as ${playerColor}`,
       );
@@ -228,8 +245,66 @@ io.on("connection", (socket) => {
     console.log(`Game restarted in room ${roomId}`);
   });
 
+  socket.on("RESIGN", () => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.resign(socket.id);
+    console.log(`Player resigned in room ${roomId}`);
+  });
+
+  socket.on("OFFER_DRAW", () => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.offerDraw(socket.id);
+    console.log(`Draw offered in room ${roomId}`);
+  });
+
+  socket.on("RESPOND_DRAW", ({ accept }) => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.respondToDraw(socket.id, accept);
+    console.log(`Draw ${accept ? "accepted" : "declined"} in room ${roomId}`);
+  });
+
   socket.on("LEAVE_ROOM", () => {
     handleDisconnect(socket.id);
+  });
+
+  socket.on("SEND_CHAT_MESSAGE", ({ text }) => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    const playerColor = room.getPlayerColor(socket.id);
+    if (!playerColor) return;
+
+    // Sanitize and limit message length
+    const sanitizedText = text.trim().slice(0, 200);
+    if (!sanitizedText) return;
+
+    const chatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sender: playerColor,
+      text: sanitizedText,
+      timestamp: Date.now(),
+    };
+
+    // Broadcast to all players in the room
+    io.to(roomId).emit("CHAT_MESSAGE", chatMessage);
   });
 
   socket.on("disconnect", () => {

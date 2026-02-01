@@ -30,13 +30,20 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
     return null;
   }
 
-  // Determine result type for styling
-  const isVictory = isMultiplayer
-    ? winner === playerColor
-    : winner !== undefined;
-  const isDefeat = isMultiplayer && winner && winner !== playerColor;
+  // Determine result type for styling (isDraw must be calculated first)
   const isDraw =
     status === "draw" || status === "stalemate" || status === "insufficient";
+  const isDisconnected = status === "disconnected";
+  const isVictory =
+    !isDraw &&
+    !isDisconnected &&
+    (isMultiplayer ? winner === playerColor : winner !== undefined);
+  const isDefeat =
+    !isDraw &&
+    !isDisconnected &&
+    isMultiplayer &&
+    winner !== undefined &&
+    winner !== playerColor;
 
   // Get result text
   const getResultText = () => {
@@ -46,6 +53,12 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
       return "Draw!";
     }
     if (status === "disconnected") return "Opponent Disconnected";
+    if (status === "resigned") {
+      if (isMultiplayer) {
+        return isVictory ? "Victory!" : "You Resigned";
+      }
+      return `${winner === "w" ? "White" : "Black"} Wins!`;
+    }
     if (status === "timeout") {
       if (isMultiplayer) {
         return isVictory ? "Victory - Time Out!" : "Defeat - Time Out!";
@@ -65,6 +78,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
   const getSubtitle = () => {
     if (isDraw) return "No winner this time";
     if (status === "disconnected") return "You win by forfeit";
+    if (status === "resigned") return isVictory ? "Opponent resigned" : "Game over";
     if (status === "checkmate") return "Checkmate!";
     if (status === "timeout") return "Time ran out";
     return "";
@@ -87,19 +101,17 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
           className={clsx(
             "p-6 text-center",
             isVictory &&
-              !isDraw &&
               "bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-600",
-            isDefeat &&
-              "bg-gradient-to-br from-red-600 via-red-700 to-red-800",
+            isDefeat && "bg-gradient-to-br from-red-600 via-red-700 to-red-800",
             isDraw &&
               "bg-gradient-to-br from-gray-500 via-gray-600 to-gray-700",
-            status === "disconnected" &&
+            isDisconnected &&
               "bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-600",
           )}
         >
           {/* Icon */}
           <div className="flex justify-center mb-3">
-            {isVictory && !isDraw && (
+            {isVictory && (
               <div className="animate-bounce">
                 <CrownIcon size={64} />
               </div>
@@ -114,7 +126,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
                 <Handshake size={64} strokeWidth={1.5} />
               </div>
             )}
-            {status === "disconnected" && (
+            {isDisconnected && (
               <div className="animate-bounce">
                 <Trophy size={64} strokeWidth={1.5} className="text-gray-800" />
               </div>
@@ -125,7 +137,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
           <h1
             className={clsx(
               "text-3xl font-black uppercase tracking-wide",
-              (isVictory || status === "disconnected") && "text-gray-900",
+              (isVictory || isDisconnected) && "text-gray-900",
               isDefeat && "text-white",
               isDraw && "text-white",
             )}
@@ -137,7 +149,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
           <p
             className={clsx(
               "mt-1 text-lg font-medium",
-              (isVictory || status === "disconnected") && "text-gray-700",
+              (isVictory || isDisconnected) && "text-gray-700",
               isDefeat && "text-red-200",
               isDraw && "text-gray-300",
             )}
