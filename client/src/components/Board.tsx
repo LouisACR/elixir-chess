@@ -41,7 +41,7 @@ export const Board: React.FC<BoardProps> = ({
   }, [board, flipped]);
 
   return (
-    <div className="w-[min(88vw,380px)] aspect-square grid grid-cols-8 grid-rows-8 rounded-lg overflow-hidden touch-none shadow-[0_0_0_3px_#4a5568,0_0_0_6px_#1a202c,0_0_30px_rgba(124,58,237,0.3),0_10px_40px_rgba(0,0,0,0.6)]">
+    <div className="w-[min(88vw,380px)] lg:w-[min(70vh,600px)] xl:w-[min(75vh,700px)] 2xl:w-[min(80vh,800px)] aspect-square grid grid-cols-8 grid-rows-8 rounded-lg overflow-hidden touch-none shadow-[0_0_0_3px_#4a5568,0_0_0_6px_#1a202c,0_0_30px_rgba(124,58,237,0.3),0_10px_40px_rgba(0,0,0,0.6)]">
       {displayBoard.map((row, rowIndex) =>
         row.map((piece, colIndex) => {
           // Calculate actual square ID (accounting for flip)

@@ -269,7 +269,7 @@ export const Shop: React.FC<ShopProps> = ({ turn, elixir, hand }) => {
   return (
     <div className="w-full bg-gradient-to-t from-[#0a0a14] via-[#12121f] to-transparent pt-3 pb-5 px-2">
       {/* Cards Row */}
-      <div className="flex justify-center items-end gap-1 max-w-[420px] mx-auto">
+      <div className="flex justify-center items-end gap-1 lg:gap-2 max-w-[420px] lg:max-w-[620px] xl:max-w-[720px] 2xl:max-w-[820px] mx-auto">
         {/* Hand Cards */}
         {hand.cards.map((type, index) => (
           <Card

@@ -253,6 +253,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
           onRestart={restartGame}
           isInCheck={isInCheck}
           elixirGain={lastElixirGain}
+          playerPerspective={playerColor || "w"}
         />
 
         <div className="flex-1 flex items-center justify-center p-2 min-h-0">
@@ -270,6 +271,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
           timers={gameState.timers}
           isInCheck={isInCheck}
           elixirGain={lastElixirGain}
+          playerPerspective={playerColor || "w"}
         />
 
         {/* Only show own hand in multiplayer */}

@@ -279,7 +279,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
   return (
     <div
       className={clsx(
-        "w-full max-w-[420px] mx-auto px-3",
+        "w-full max-w-[420px] lg:max-w-[620px] xl:max-w-[720px] 2xl:max-w-[820px] mx-auto px-3",
         position === "top" ? "pt-1 pb-2" : "pt-2 pb-1",
       )}
     >
@@ -387,6 +387,7 @@ interface TopHUDProps {
   onRestart: () => void;
   isInCheck?: boolean;
   elixirGain?: ElixirGainEvent | null;
+  playerPerspective?: PlayerColor;
 }
 
 export const TopHUD: React.FC<TopHUDProps> = ({
@@ -395,18 +396,21 @@ export const TopHUD: React.FC<TopHUDProps> = ({
   onRestart,
   isInCheck,
   elixirGain,
+  playerPerspective,
 }) => {
   const { elixir, turn, status, winner } = gameState;
-  const blackElixir = elixir.b;
-  const blackTimer = timers.b;
-  const isBlackTurn = turn === "b";
-  const isBlackInCheck = Boolean(isInCheck && turn === "b");
+  // In multiplayer, show opponent at top. If playing as black, opponent is white.
+  const topColor: PlayerColor = playerPerspective === "b" ? "w" : "b";
+  const topElixir = elixir[topColor];
+  const topTimer = timers[topColor];
+  const isTopTurn = turn === topColor;
+  const isTopInCheck = Boolean(isInCheck && turn === topColor);
 
   return (
     <div className="w-full">
       {/* Game Header Bar */}
       <div className="w-full bg-gradient-to-b from-[#0f0f1a] via-[#1a1a2e] to-transparent">
-        <div className="max-w-[420px] mx-auto px-3 py-2 flex items-center justify-between">
+        <div className="max-w-[420px] lg:max-w-[620px] xl:max-w-[720px] 2xl:max-w-[820px] mx-auto px-3 py-2 flex items-center justify-between">
           {/* Game Title / Status */}
           {status !== "playing" ? (
             <div className="flex items-center gap-2 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 px-4 py-2 rounded-xl shadow-[0_4px_15px_rgba(245,158,11,0.5)]">
@@ -436,13 +440,13 @@ export const TopHUD: React.FC<TopHUDProps> = ({
         </div>
       </div>
 
-      {/* Black Player Panel */}
+      {/* Opponent Player Panel (top) */}
       <PlayerPanel
-        color="b"
-        timer={blackTimer}
-        elixir={blackElixir}
-        isCurrentTurn={isBlackTurn}
-        isInCheck={isBlackInCheck}
+        color={topColor}
+        timer={topTimer}
+        elixir={topElixir}
+        isCurrentTurn={isTopTurn}
+        isInCheck={isTopInCheck}
         position="top"
         elixirGain={elixirGain}
       />
@@ -451,7 +455,7 @@ export const TopHUD: React.FC<TopHUDProps> = ({
 };
 
 // ============================================
-// Bottom HUD (White Player)
+// Bottom HUD (Current Player)
 // ============================================
 
 interface BottomHUDProps {
@@ -459,6 +463,7 @@ interface BottomHUDProps {
   timers: Record<PlayerColor, number>;
   isInCheck?: boolean;
   elixirGain?: ElixirGainEvent | null;
+  playerPerspective?: PlayerColor;
 }
 
 export const BottomHUD: React.FC<BottomHUDProps> = ({
@@ -466,20 +471,23 @@ export const BottomHUD: React.FC<BottomHUDProps> = ({
   timers,
   isInCheck,
   elixirGain,
+  playerPerspective,
 }) => {
   const { elixir, turn } = gameState;
-  const whiteElixir = elixir.w;
-  const whiteTimer = timers.w;
-  const isWhiteTurn = turn === "w";
-  const isWhiteInCheck = Boolean(isInCheck && turn === "w");
+  // In multiplayer, show current player at bottom. If playing as black, show black.
+  const bottomColor: PlayerColor = playerPerspective === "b" ? "b" : "w";
+  const bottomElixir = elixir[bottomColor];
+  const bottomTimer = timers[bottomColor];
+  const isBottomTurn = turn === bottomColor;
+  const isBottomInCheck = Boolean(isInCheck && turn === bottomColor);
 
   return (
     <PlayerPanel
-      color="w"
-      timer={whiteTimer}
-      elixir={whiteElixir}
-      isCurrentTurn={isWhiteTurn}
-      isInCheck={isWhiteInCheck}
+      color={bottomColor}
+      timer={bottomTimer}
+      elixir={bottomElixir}
+      isCurrentTurn={isBottomTurn}
+      isInCheck={isBottomInCheck}
       position="bottom"
       elixirGain={elixirGain}
     />
