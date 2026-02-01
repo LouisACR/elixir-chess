@@ -1,13 +1,17 @@
+name: elixir-chess
+
 services:
   # ============================================
   # Client - Nginx serving static React app
   # ============================================
   client:
-    image: ghcr.io/louisacr/elixir-chess-client:latest
+    image: ghcr.io/louisacr/elixir-chess-client:main
     container_name: elixir-chess-client
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80" # Only expose to localhost for cloudflared
+      - target: 80
+        published: "8894"
+        protocol: tcp
     depends_on:
       server:
         condition: service_healthy
@@ -26,7 +30,7 @@ services:
   # Server - Node.js Express + Socket.IO
   # ============================================
   server:
-    image: ghcr.io/louisacr/elixir-chess-server:latest
+    image: ghcr.io/louisacr/elixir-chess-server:main
     container_name: elixir-chess-server
     restart: unless-stopped
     environment:
@@ -48,3 +52,30 @@ services:
 networks:
   elixir-chess-network:
     driver: bridge
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: client
+  author: LouisACR
+  category: Games
+  description:
+    en_us: |
+      Elixir Chess - A multiplayer chess variant with elixir mechanics.
+      Play chess with a twist - collect elixir and use special abilities!
+  developer: LouisACR
+  icon: https://raw.githubusercontent.com/LouisACR/elixir-chess/main/client/public/vite.svg
+  index: /
+  port_map: "8894"
+  scheme: http
+  store_app_id: elixir-chess
+  tagline:
+    en_us: Multiplayer chess with elixir mechanics
+  title:
+    en_us: Elixir Chess
+  tips:
+    before_install:
+      en_us: |
+        This app requires WebSocket support.
+        Make sure your reverse proxy (if any) supports WebSocket connections.
