@@ -26,6 +26,117 @@ export interface Premove {
   to: Square;
 }
 
+// Helper to get all theoretically possible squares a piece could move to
+// This is used for premoves - we show all possible targets, validation happens on execution
+function getPremoveTargets(
+  chess: Chess,
+  square: Square,
+  playerColor: PlayerColor,
+): string[] {
+  const piece = chess.get(square);
+  if (!piece || piece.color !== playerColor) return [];
+
+  const file = square.charCodeAt(0) - 97; // 0-7
+  const rank = parseInt(square[1]) - 1; // 0-7
+  const targets: Set<string> = new Set();
+
+  const addIfValid = (f: number, r: number) => {
+    if (f >= 0 && f <= 7 && r >= 0 && r <= 7) {
+      const sq = String.fromCharCode(97 + f) + (r + 1);
+      // Don't include squares with own pieces
+      const targetPiece = chess.get(sq as Square);
+      if (!targetPiece || targetPiece.color !== playerColor) {
+        targets.add(sq);
+      }
+    }
+  };
+
+  switch (piece.type) {
+    case "p": {
+      const dir = playerColor === "w" ? 1 : -1;
+      // Forward moves
+      addIfValid(file, rank + dir);
+      if (
+        (playerColor === "w" && rank === 1) ||
+        (playerColor === "b" && rank === 6)
+      ) {
+        addIfValid(file, rank + 2 * dir);
+      }
+      // Captures (diagonal)
+      addIfValid(file - 1, rank + dir);
+      addIfValid(file + 1, rank + dir);
+      break;
+    }
+    case "n": {
+      const knightMoves = [
+        [-2, -1],
+        [-2, 1],
+        [-1, -2],
+        [-1, 2],
+        [1, -2],
+        [1, 2],
+        [2, -1],
+        [2, 1],
+      ];
+      for (const [df, dr] of knightMoves) {
+        addIfValid(file + df, rank + dr);
+      }
+      break;
+    }
+    case "b": {
+      for (let i = 1; i <= 7; i++) {
+        addIfValid(file + i, rank + i);
+        addIfValid(file + i, rank - i);
+        addIfValid(file - i, rank + i);
+        addIfValid(file - i, rank - i);
+      }
+      break;
+    }
+    case "r": {
+      for (let i = 1; i <= 7; i++) {
+        addIfValid(file + i, rank);
+        addIfValid(file - i, rank);
+        addIfValid(file, rank + i);
+        addIfValid(file, rank - i);
+      }
+      break;
+    }
+    case "q": {
+      for (let i = 1; i <= 7; i++) {
+        addIfValid(file + i, rank);
+        addIfValid(file - i, rank);
+        addIfValid(file, rank + i);
+        addIfValid(file, rank - i);
+        addIfValid(file + i, rank + i);
+        addIfValid(file + i, rank - i);
+        addIfValid(file - i, rank + i);
+        addIfValid(file - i, rank - i);
+      }
+      break;
+    }
+    case "k": {
+      for (let df = -1; df <= 1; df++) {
+        for (let dr = -1; dr <= 1; dr++) {
+          if (df !== 0 || dr !== 0) {
+            addIfValid(file + df, rank + dr);
+          }
+        }
+      }
+      // Castling squares
+      if (playerColor === "w") {
+        addIfValid(6, 0); // g1
+        addIfValid(2, 0); // c1
+      } else {
+        addIfValid(6, 7); // g8
+        addIfValid(2, 7); // c8
+      }
+      break;
+    }
+  }
+
+  return Array.from(targets);
+}
+
 export interface MultiplayerGameState {
   fen: string;
   turn: PlayerColor;
@@ -426,14 +537,19 @@ export function useMultiplayerGame() {
       if (!square) {
         setSelectedSquare(null);
         setValidMoves([]);
+        setPremoveValidMoves([]);
         return;
       }
 
-      const isMyTurnNow = gameState.turn === playerColor;
+      if (!playerColor || gameState.status !== "playing") return;
 
-      // === NORMAL MOVE (my turn) ===
+      const isMyTurnNow = gameState.turn === playerColor;
+      const piece = chessRef.current.get(square as Square);
+      const isOwnPiece = piece && piece.color === playerColor;
+
+      // === DURING MY TURN ===
       if (isMyTurnNow) {
-        // Cancel any premove when making a real move
+        // Cancel any premove when interacting during my turn
         if (premove) {
           setPremove(null);
           setPremoveValidMoves([]);
@@ -447,65 +563,64 @@ export function useMultiplayerGame() {
           return;
         }
 
-        // Check if clicking own piece
-        const piece = chessRef.current.get(square as Square);
-        if (piece && piece.color === playerColor) {
-          setSelectedSquare(square);
-          const moves = chessRef.current.moves({
-            square: square as Square,
-            verbose: true,
-          });
-          setValidMoves(moves.map((m) => m.to));
+        // Click on own piece: select it and show valid moves
+        if (isOwnPiece) {
+          if (selectedSquare === square) {
+            // Deselect
+            setSelectedSquare(null);
+            setValidMoves([]);
+          } else {
+            setSelectedSquare(square);
+            const moves = chessRef.current.moves({
+              square: square as Square,
+              verbose: true,
+            });
+            setValidMoves(moves.map((m) => m.to));
+          }
         } else {
+          // Click on empty or opponent piece without valid move: deselect
           setSelectedSquare(null);
           setValidMoves([]);
         }
       }
-      // === PREMOVE (opponent's turn) ===
-      else if (playerColor && gameState.status === "playing") {
-        const piece = chessRef.current.get(square as Square);
-
-        // If we have a selected square for premove
-        if (selectedSquare) {
-          // Check if clicking a target square (any square that's not our own piece)
-          const targetPiece = chessRef.current.get(square as Square);
-          const isOwnPiece = targetPiece && targetPiece.color === playerColor;
-
-          if (!isOwnPiece && premoveValidMoves.includes(square)) {
-            // Set the premove
-            setPremove({
-              from: selectedSquare as Square,
-              to: square as Square,
-            });
-            setSelectedSquare(null);
-            setValidMoves([]);
-            setPremoveValidMoves([]);
-            return;
-          }
+      // === DURING OPPONENT'S TURN (PREMOVE MODE) ===
+      else {
+        // If we have a piece selected for premove and click a valid premove target
+        if (selectedSquare && premoveValidMoves.includes(square)) {
+          // Set the premove
+          setPremove({
+            from: selectedSquare as Square,
+            to: square as Square,
+          });
+          setSelectedSquare(null);
+          setValidMoves([]);
+          setPremoveValidMoves([]);
+          return;
         }
 
-        // Check if clicking own piece to set up premove
-        if (piece && piece.color === playerColor) {
+        // Click on own piece: select it for premove
+        if (isOwnPiece) {
           // Clear existing premove when selecting a new piece
           setPremove(null);
 
           if (selectedSquare === square) {
+            // Deselect
             setSelectedSquare(null);
             setValidMoves([]);
             setPremoveValidMoves([]);
           } else {
             setSelectedSquare(square);
-            // For premove, show all possible moves (we'll validate when executing)
-            const moves = chessRef.current.moves({
-              square: square as Square,
-              verbose: true,
-            });
-            const moveTargets = moves.map((m) => m.to);
             setValidMoves([]);
-            setPremoveValidMoves(moveTargets);
+            // For premove, show ALL theoretically possible squares (not just currently legal)
+            const targets = getPremoveTargets(
+              chessRef.current,
+              square as Square,
+              playerColor,
+            );
+            setPremoveValidMoves(targets);
           }
-        } else if (!piece || piece.color !== playerColor) {
-          // Clicking empty square or opponent piece - cancel premove selection
+        } else {
+          // Click on empty or opponent piece without premove target selected: deselect
           setSelectedSquare(null);
           setValidMoves([]);
           setPremoveValidMoves([]);
