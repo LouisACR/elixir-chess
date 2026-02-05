@@ -8,6 +8,7 @@ import type {
   ElixirGainEvent,
   GameStatus,
   Premove,
+  TimeControlType,
 } from "@elixir-chess/shared";
 import {
   PIECE_COSTS,
@@ -20,6 +21,7 @@ import {
   INITIAL_FEN,
   initializeHand,
   generateDeck,
+  TIME_CONTROLS,
 } from "@elixir-chess/shared";
 
 // ============================================
@@ -149,6 +151,7 @@ export type RoomEventEmitter = {
 
 export class GameRoom {
   public readonly roomId: string;
+  public readonly timeControl: TimeControlType;
   public players: Record<PlayerColor, string | undefined> = {
     w: undefined,
     b: undefined,
@@ -169,20 +172,29 @@ export class GameRoom {
     b: [],
   };
 
-  constructor(roomId: string, emitter: RoomEventEmitter) {
+  // Draw offer state
+  private pendingDrawOffer: PlayerColor | null = null;
+
+  constructor(
+    roomId: string,
+    emitter: RoomEventEmitter,
+    timeControl: TimeControlType = "blitz",
+  ) {
     this.roomId = roomId;
+    this.timeControl = timeControl;
     this.emitter = emitter;
     this.chess = new Chess(INITIAL_FEN);
     this.gameState = this.createInitialGameState();
   }
 
   private createInitialGameState(): GameState {
+    const initialTime = TIME_CONTROLS[this.timeControl].time;
     return {
       fen: this.chess.fen(),
       turn: "w",
       elixir: { w: STARTING_ELIXIR, b: STARTING_ELIXIR },
       hands: { w: initializeHand(), b: initializeHand() },
-      timers: { w: INITIAL_TIME, b: INITIAL_TIME },
+      timers: { w: initialTime, b: initialTime },
       status: "waiting",
       history: [],
     };
@@ -518,8 +530,9 @@ export class GameRoom {
     this.gameState = this.createInitialGameState();
     this.gameState.status = "playing";
 
-    // Clear premoves
+    // Clear premoves and draw offers
     this.premoves = { w: [], b: [] };
+    this.pendingDrawOffer = null;
 
     this.startTimers();
 
@@ -539,6 +552,68 @@ export class GameRoom {
       );
     }
 
+    return true;
+  }
+
+  // ============================================
+  // Resign & Draw
+  // ============================================
+
+  resign(socketId: string): boolean {
+    const playerColor = this.getPlayerColor(socketId);
+    if (!playerColor) return false;
+    if (this.gameState.status !== "playing") return false;
+
+    // The opponent wins
+    const winner = playerColor === "w" ? "b" : "w";
+    this.endGame("resigned", winner);
+    return true;
+  }
+
+  offerDraw(socketId: string): boolean {
+    const playerColor = this.getPlayerColor(socketId);
+    if (!playerColor) return false;
+    if (this.gameState.status !== "playing") return false;
+
+    // Can't offer draw if there's already a pending offer
+    if (this.pendingDrawOffer !== null) return false;
+
+    this.pendingDrawOffer = playerColor;
+
+    // Notify opponent of the draw offer
+    const opponentColor = playerColor === "w" ? "b" : "w";
+    if (this.players[opponentColor]) {
+      this.emitter.emitToPlayer(this.players[opponentColor]!, "DRAW_OFFERED", {
+        from: playerColor,
+      });
+    }
+
+    return true;
+  }
+
+  respondToDraw(socketId: string, accept: boolean): boolean {
+    const playerColor = this.getPlayerColor(socketId);
+    if (!playerColor) return false;
+    if (this.gameState.status !== "playing") return false;
+
+    // Must be the opponent of the one who offered
+    if (this.pendingDrawOffer === null) return false;
+    if (this.pendingDrawOffer === playerColor) return false;
+
+    if (accept) {
+      this.endGame("draw");
+    } else {
+      // Notify the player who offered that draw was declined
+      if (this.players[this.pendingDrawOffer]) {
+        this.emitter.emitToPlayer(
+          this.players[this.pendingDrawOffer]!,
+          "DRAW_DECLINED",
+          {},
+        );
+      }
+    }
+
+    this.pendingDrawOffer = null;
     return true;
   }
 

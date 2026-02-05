@@ -33,7 +33,8 @@ export type GameStatus =
   | "stalemate"
   | "insufficient"
   | "timeout"
-  | "disconnected";
+  | "disconnected"
+  | "resigned";
 
 export interface GameState {
   fen: string;
@@ -109,11 +110,35 @@ export interface Premove {
 }
 
 // ============================================
+// Chat Types
+// ============================================
+
+export interface ChatMessage {
+  id: string;
+  sender: PlayerColor;
+  text: string;
+  timestamp: number;
+  isSystem?: boolean;
+}
+
+// Quick chat messages like Chess.com
+export const QUICK_CHAT_MESSAGES = [
+  "Bien joué !",
+  "Bonne chance !",
+  "Merci !",
+  "Oups...",
+  "Wow !",
+  "GG",
+] as const;
+
+export type QuickChatMessage = (typeof QUICK_CHAT_MESSAGES)[number];
+
+// ============================================
 // Socket Events - Client to Server
 // ============================================
 
 export interface ClientToServerEvents {
-  CREATE_ROOM: () => void;
+  CREATE_ROOM: (data: { timeControl: TimeControlType }) => void;
   JOIN_ROOM: (data: { roomId: string }) => void;
   PLACE_PIECE: (data: { type: PieceType; square: string }) => void;
   MOVE_PIECE: (data: { from: string; to: string }) => void;
@@ -121,6 +146,10 @@ export interface ClientToServerEvents {
   CLEAR_PREMOVES: () => void;
   RESTART_GAME: () => void;
   LEAVE_ROOM: () => void;
+  RESIGN: () => void;
+  OFFER_DRAW: () => void;
+  RESPOND_DRAW: (data: { accept: boolean }) => void;
+  SEND_CHAT_MESSAGE: (data: { text: string }) => void;
 }
 
 // ============================================
@@ -128,8 +157,16 @@ export interface ClientToServerEvents {
 // ============================================
 
 export interface ServerToClientEvents {
-  ROOM_CREATED: (data: { roomId: string; playerColor: PlayerColor }) => void;
-  ROOM_JOINED: (data: { roomId: string; playerColor: PlayerColor }) => void;
+  ROOM_CREATED: (data: {
+    roomId: string;
+    playerColor: PlayerColor;
+    timeControl: TimeControlType;
+  }) => void;
+  ROOM_JOINED: (data: {
+    roomId: string;
+    playerColor: PlayerColor;
+    timeControl: TimeControlType;
+  }) => void;
   GAME_START: (data: PlayerView) => void;
   GAME_STATE_UPDATE: (
     data: PlayerView & { gainEvent?: ElixirGainEvent },
@@ -144,6 +181,9 @@ export interface ServerToClientEvents {
   PLAYER_DISCONNECTED: (data: { playerColor: PlayerColor }) => void;
   PLAYER_RECONNECTED: (data: { playerColor: PlayerColor }) => void;
   PREMOVES_CLEARED: (data: { reason: string }) => void;
+  DRAW_OFFERED: (data: { from: PlayerColor }) => void;
+  DRAW_DECLINED: () => void;
+  CHAT_MESSAGE: (data: ChatMessage) => void;
   ERROR: (data: { message: string }) => void;
 }
 
@@ -199,6 +239,44 @@ export const DECK_SIZE = 20;
 export const INITIAL_TIME = 180;
 export const TIMER_TICK_MS = 100;
 export const RECONNECT_TIMEOUT_MS = 30000;
+
+// ============================================
+// Time Control Types
+// ============================================
+
+export type TimeControlType = "bullet" | "blitz" | "rapid";
+
+export interface TimeControl {
+  type: TimeControlType;
+  time: number; // in seconds
+  label: string;
+  color: string;
+  icon: string; // emoji or icon name
+}
+
+export const TIME_CONTROLS: Record<TimeControlType, TimeControl> = {
+  bullet: {
+    type: "bullet",
+    time: 60, // 1 minute
+    label: "Bullet",
+    color: "#eab308", // yellow
+    icon: "⚡",
+  },
+  blitz: {
+    type: "blitz",
+    time: 180, // 3 minutes
+    label: "Blitz",
+    color: "#f97316", // orange
+    icon: "🔥",
+  },
+  rapid: {
+    type: "rapid",
+    time: 600, // 10 minutes
+    label: "Rapide",
+    color: "#22c55e", // green
+    icon: "🐢",
+  },
+};
 
 // Re-export card utilities
 export { drawCard, generateDeck, initializeHand, cycleCard } from "./cards.js";
