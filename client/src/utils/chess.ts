@@ -113,6 +113,9 @@ export function getValidPlacementSquares(
       // Must be in placement zone
       if (!isInPlacementZone(squareId, turn)) return;
 
+      // Pawns cannot be placed on the 1st or 8th rank
+      if (pieceType === "p" && (rank === 1 || rank === 8)) return;
+
       if (isInCheck) {
         // When in check, must also block the check
         if (wouldBlockCheck(game, pieceType, squareId)) {

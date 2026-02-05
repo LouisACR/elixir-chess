@@ -99,6 +99,9 @@ function getValidPlacementSquares(
 
   for (const file of files) {
     for (const rank of PLACEMENT_ZONES[color]) {
+      // Pawns cannot be placed on the 1st or 8th rank
+      if (pieceType === "p" && (rank === 1 || rank === 8)) continue;
+
       const square = `${file}${rank}`;
       const pieceAtSquare = game.get(square as Square);
 
