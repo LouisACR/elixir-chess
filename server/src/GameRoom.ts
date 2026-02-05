@@ -164,7 +164,10 @@ export class GameRoom {
   private chess: Chess;
   private gameState: GameState;
   private timerInterval: NodeJS.Timeout | null = null;
+  private premoveTimeout: NodeJS.Timeout | null = null;
   private emitter: RoomEventEmitter;
+
+  private lastTimerTick: number = 0;
 
   // Premove queues for each player
   private premoves: Record<PlayerColor, Premove[]> = {
@@ -217,9 +220,11 @@ export class GameRoom {
 
   removePlayer(socketId: string): PlayerColor | null {
     if (this.players.w === socketId) {
+      this.players.w = undefined;
       this.disconnectedPlayers.w = Date.now();
       return "w";
     } else if (this.players.b === socketId) {
+      this.players.b = undefined;
       this.disconnectedPlayers.b = Date.now();
       return "b";
     }
@@ -279,13 +284,19 @@ export class GameRoom {
   private startTimers(): void {
     if (this.timerInterval) clearInterval(this.timerInterval);
 
+    this.lastTimerTick = Date.now();
+
     this.timerInterval = setInterval(() => {
       if (this.gameState.status !== "playing") return;
+
+      const now = Date.now();
+      const elapsed = (now - this.lastTimerTick) / 1000;
+      this.lastTimerTick = now;
 
       const currentTurn = this.gameState.turn;
       this.gameState.timers[currentTurn] = Math.max(
         0,
-        this.gameState.timers[currentTurn] - TIMER_TICK_MS / 1000,
+        this.gameState.timers[currentTurn] - elapsed,
       );
 
       // Broadcast timer update
@@ -314,6 +325,10 @@ export class GameRoom {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
+    if (this.premoveTimeout) {
+      clearTimeout(this.premoveTimeout);
+      this.premoveTimeout = null;
+    }
   }
 
   private endGame(status: GameStatus, winner?: PlayerColor): void {
@@ -339,6 +354,13 @@ export class GameRoom {
     if (this.gameState.turn !== playerColor)
       return { success: false, reason: "Not your turn" };
 
+    // Input validation
+    const validPieceTypes: PieceType[] = ["p", "n", "b", "r", "q"];
+    if (!validPieceTypes.includes(type))
+      return { success: false, reason: "Invalid piece type" };
+    if (!/^[a-h][1-8]$/.test(square))
+      return { success: false, reason: "Invalid square" };
+
     const hand = this.gameState.hands[playerColor];
     const cardIndex = hand.cards.indexOf(type);
     if (cardIndex === -1) return { success: false, reason: "Card not in hand" };
@@ -360,6 +382,7 @@ export class GameRoom {
 
     // Place the piece
     const wasInCheck = this.chess.inCheck();
+    const originalFen = this.chess.fen();
     const rank = parseInt(square[1]);
     const isPawnOnBackRank = type === "p" && (rank === 1 || rank === 8);
 
@@ -397,7 +420,13 @@ export class GameRoom {
 
     // Verify no self-check after placement
     if (this.chess.inCheck() && this.chess.turn() === playerColor) {
-      this.chess.remove(square as Square);
+      // Restore original FEN (handles both normal put() and FEN manipulation paths)
+      this.chess.load(
+        this.chess.fen().split(" ")[0] === originalFen.split(" ")[0]
+          ? originalFen
+          : originalFen,
+        { skipValidation: true },
+      );
       return { success: false, reason: "Cannot place into check" };
     }
 
@@ -509,12 +538,41 @@ export class GameRoom {
         this.endGame("checkmate", turn === "w" ? "b" : "w");
       }
     } else if (this.chess.isStalemate()) {
-      // Check if player can place any piece
-      const canPlace = hand.cards.some((pieceType: PieceType) => {
+      // Check if player can place any piece (also verify placement wouldn't cause self-check)
+      const originalFen = this.chess.fen();
+      let canPlace = false;
+
+      for (const pieceType of hand.cards) {
         const cost = PIECE_COSTS[pieceType];
-        if (elixir < cost) return false;
-        return getValidPlacementSquares(this.chess, pieceType, turn).length > 0;
-      });
+        if (elixir < cost) continue;
+
+        const validSquares = getValidPlacementSquares(
+          this.chess,
+          pieceType,
+          turn,
+        );
+        for (const sq of validSquares) {
+          try {
+            const placed = this.chess.put(
+              { type: pieceType, color: turn },
+              sq as Square,
+            );
+            if (placed) {
+              const wouldBeInCheck = this.chess.inCheck();
+              this.chess.load(originalFen, { skipValidation: true });
+              if (!wouldBeInCheck) {
+                canPlace = true;
+                break;
+              }
+            } else {
+              this.chess.load(originalFen, { skipValidation: true });
+            }
+          } catch {
+            this.chess.load(originalFen, { skipValidation: true });
+          }
+        }
+        if (canPlace) break;
+      }
 
       if (!canPlace) {
         this.endGame("stalemate");
@@ -652,7 +710,8 @@ export class GameRoom {
     if (!playerColor) return;
     if (this.gameState.status !== "playing") return;
 
-    this.premoves[playerColor] = premoves;
+    // Cap premove queue size to prevent abuse
+    this.premoves[playerColor] = premoves.slice(0, 10);
 
     // Notify the player of their updated premoves
     if (this.players[playerColor]) {
@@ -690,12 +749,15 @@ export class GameRoom {
   }
 
   private tryExecutePremove(): boolean {
+    if (this.gameState.status !== "playing") return false;
+
     const currentTurn = this.gameState.turn;
     const premoveQueue = this.premoves[currentTurn];
 
     if (premoveQueue.length === 0) return false;
 
     const premove = premoveQueue[0];
+    const wasInCheck = this.chess.inCheck();
 
     // Validate the premove is still legal
     try {
@@ -719,11 +781,23 @@ export class GameRoom {
       this.gameState.turn = this.chess.turn() as PlayerColor;
       this.gameState.history = this.chess.history();
 
+      // Check for bonus elixir (same logic as movePiece)
+      const nowInCheck = this.chess.inCheck();
+      let gainEvent: ElixirGainEvent | undefined;
+      if (
+        !wasInCheck &&
+        !nowInCheck &&
+        this.gameState.elixir[currentTurn] < MAX_ELIXIR
+      ) {
+        this.gameState.elixir[currentTurn]++;
+        gainEvent = { player: currentTurn, amount: 1, timestamp: Date.now() };
+      }
+
       // Check for game end
       this.checkGameEnd();
 
       // Broadcast state update
-      this.broadcastGameState();
+      this.broadcastGameState(gainEvent);
 
       return true;
     } catch {
@@ -752,8 +826,12 @@ export class GameRoom {
     // Try to execute premove for the player whose turn it is
     // Use setTimeout to allow the state update to be processed first
     if (this.gameState.status === "playing") {
-      setTimeout(() => {
-        this.tryExecutePremove();
+      if (this.premoveTimeout) clearTimeout(this.premoveTimeout);
+      this.premoveTimeout = setTimeout(() => {
+        this.premoveTimeout = null;
+        if (this.gameState.status === "playing") {
+          this.tryExecutePremove();
+        }
       }, 50);
     }
   }

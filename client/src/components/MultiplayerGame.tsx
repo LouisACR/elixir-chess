@@ -259,13 +259,15 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
         />
 
         {/* Draw Offer Popup */}
-        {pendingDrawOffer && pendingDrawOffer !== playerColor && (
-          <DrawOfferPopup
-            from={pendingDrawOffer}
-            onAccept={() => respondToDraw(true)}
-            onDecline={() => respondToDraw(false)}
-          />
-        )}
+        {pendingDrawOffer &&
+          pendingDrawOffer !== playerColor &&
+          gameState.status === "playing" && (
+            <DrawOfferPopup
+              from={pendingDrawOffer}
+              onAccept={() => respondToDraw(true)}
+              onDecline={() => respondToDraw(false)}
+            />
+          )}
 
         {/* Draw Declined Toast */}
         <DrawDeclinedToast visible={drawDeclined} />

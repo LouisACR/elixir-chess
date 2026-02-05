@@ -14,6 +14,16 @@ export type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let socket: TypedSocket | null = null;
 
+// Generate or retrieve a persistent session ID for reconnection
+function getSessionId(): string {
+  let sessionId = sessionStorage.getItem("elixir-chess-session-id");
+  if (!sessionId) {
+    sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    sessionStorage.setItem("elixir-chess-session-id", sessionId);
+  }
+  return sessionId;
+}
+
 export function getSocket(): TypedSocket {
   if (!socket) {
     socket = io(SERVER_URL, {
@@ -21,6 +31,9 @@ export function getSocket(): TypedSocket {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      auth: {
+        sessionId: getSessionId(),
+      },
     });
   }
   return socket;

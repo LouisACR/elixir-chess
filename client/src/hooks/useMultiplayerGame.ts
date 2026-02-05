@@ -11,7 +11,12 @@ import type {
   Piece,
   TimeControlType,
 } from "@elixir-chess/shared";
-import { STARTING_ELIXIR, INITIAL_TIME, HAND_SIZE } from "@elixir-chess/shared";
+import {
+  STARTING_ELIXIR,
+  INITIAL_TIME,
+  INITIAL_FEN,
+  HAND_SIZE,
+} from "@elixir-chess/shared";
 import { getSocket, connectSocket, disconnectSocket } from "../services/socket";
 
 // Re-export for convenience
@@ -265,7 +270,7 @@ const EMPTY_HAND: CardHand = {
 };
 
 const INITIAL_MULTIPLAYER_STATE: MultiplayerGameState = {
-  fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  fen: INITIAL_FEN,
   turn: "w",
   elixir: { w: STARTING_ELIXIR, b: STARTING_ELIXIR },
   timers: { w: INITIAL_TIME, b: INITIAL_TIME },
@@ -307,6 +312,19 @@ export function useMultiplayerGame() {
 
   // Optimistic updates queue
   const optimisticQueue = useRef<OptimisticAction[]>([]);
+
+  // Timeout refs for cleanup
+  const errorTimeoutRef = useRef<number | null>(null);
+  const drawDeclinedTimeoutRef = useRef<number | null>(null);
+
+  // Clean up timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current) window.clearTimeout(errorTimeoutRef.current);
+      if (drawDeclinedTimeoutRef.current)
+        window.clearTimeout(drawDeclinedTimeoutRef.current);
+    };
+  }, []);
 
   // Selection state (for click-to-move)
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -517,14 +535,21 @@ export function useMultiplayerGame() {
     }) => {
       console.warn(`Action ${action} rejected: ${reason}`);
 
-      // Rollback optimistic update
-      const lastOptimistic = optimisticQueue.current.pop();
-      if (lastOptimistic) {
-        setGameState(lastOptimistic.previousState);
+      // Rollback optimistic update — find matching action instead of blindly popping
+      const idx = optimisticQueue.current.findIndex((o) => o.type === action);
+      if (idx !== -1) {
+        const optimistic = optimisticQueue.current.splice(idx, 1)[0];
+        setGameState(optimistic.previousState);
+      } else {
+        // Fallback: pop last
+        const lastOptimistic = optimisticQueue.current.pop();
+        if (lastOptimistic) {
+          setGameState(lastOptimistic.previousState);
+        }
       }
 
       setError(reason);
-      setTimeout(() => setError(null), 3000);
+      errorTimeoutRef.current = window.setTimeout(() => setError(null), 3000);
     };
 
     const handleGameOver = ({
@@ -548,15 +573,16 @@ export function useMultiplayerGame() {
 
     const handleError = ({ message }: { message: string }) => {
       setError(message);
-      setTimeout(() => setError(null), 5000);
+      errorTimeoutRef.current = window.setTimeout(() => setError(null), 5000);
     };
 
     const handlePremovesCleared = ({ reason }: { reason: string }) => {
       console.log(`Premoves cleared: ${reason}`);
-      // Clear local selection state
+      // Clear local selection state and premove queue
       setSelectedSquare(null);
       setValidMoves([]);
       setPremoveValidMoves([]);
+      setGameState((prev) => ({ ...prev, premoves: [] }));
     };
 
     const handleDrawOffered = ({ from }: { from: PlayerColor }) => {
@@ -567,7 +593,10 @@ export function useMultiplayerGame() {
     const handleDrawDeclined = () => {
       setPendingDrawOffer(null);
       setDrawDeclined(true);
-      setTimeout(() => setDrawDeclined(false), 3000);
+      drawDeclinedTimeoutRef.current = window.setTimeout(
+        () => setDrawDeclined(false),
+        3000,
+      );
     };
 
     const handleDisconnect = () => {

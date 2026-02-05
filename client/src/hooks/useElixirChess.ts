@@ -82,14 +82,19 @@ export function useElixirChess() {
       return;
     }
 
+    let lastTickTime = Date.now();
+
     const intervalId = window.setInterval(() => {
       // Read from ref to get latest value
       if (gameStatusRef.current !== "playing") return;
 
       const currentTurn = currentTurnRef.current;
+      const now = Date.now();
+      const elapsed = (now - lastTickTime) / 1000;
+      lastTickTime = now;
 
       setTimers((prev) => {
-        const newTime = Math.max(0, prev[currentTurn] - 0.1);
+        const newTime = Math.max(0, prev[currentTurn] - elapsed);
 
         // Check for timeout
         if (newTime <= 0) {
@@ -348,10 +353,26 @@ export function useElixirChess() {
         let winner: PlayerColor | undefined;
 
         if (game.isCheckmate()) {
-          status = "checkmate";
-          winner = turn; // The player who just moved wins
+          if (
+            !canBlockCheckByPlacing(
+              game,
+              gameState.hands[newTurn as PlayerColor].cards,
+              gameState.elixir[newTurn as PlayerColor],
+            )
+          ) {
+            status = "checkmate";
+            winner = turn; // The player who just moved wins
+          }
         } else if (game.isStalemate()) {
-          status = "stalemate";
+          if (
+            !canPlaceAnyPiece(
+              game,
+              gameState.hands[newTurn as PlayerColor].cards,
+              gameState.elixir[newTurn as PlayerColor],
+            )
+          ) {
+            status = "stalemate";
+          }
         }
         // Removed: isDraw() and isInsufficientMaterial() checks
 

@@ -15,13 +15,6 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 app.use(cors());
 
-// Health check endpoint for Docker
-app.get("/health", (_req, res) => {
-  res
-    .status(200)
-    .json({ status: "healthy", timestamp: new Date().toISOString() });
-});
-
 const httpServer = createServer(app);
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
@@ -44,6 +37,51 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 
 const rooms = new Map<string, GameRoom>();
 const playerRooms = new Map<string, string>(); // socketId -> roomId
+const sessionRooms = new Map<string, { roomId: string; color: "w" | "b" }>(); // sessionId -> room+color
+
+// ============================================
+// Rate Limiting
+// ============================================
+
+const rateLimitBuckets = new Map<
+  string,
+  { tokens: number; lastRefill: number }
+>();
+const RATE_LIMIT_GAME = { maxTokens: 10, refillRate: 10, refillInterval: 1000 }; // 10 actions/sec
+const RATE_LIMIT_CHAT = { maxTokens: 2, refillRate: 2, refillInterval: 1000 }; // 2 msgs/sec
+
+function checkRateLimit(
+  socketId: string,
+  category: string,
+  config: { maxTokens: number; refillRate: number; refillInterval: number },
+): boolean {
+  const key = `${socketId}:${category}`;
+  const now = Date.now();
+  let bucket = rateLimitBuckets.get(key);
+
+  if (!bucket) {
+    bucket = { tokens: config.maxTokens, lastRefill: now };
+    rateLimitBuckets.set(key, bucket);
+  }
+
+  // Refill tokens based on elapsed time
+  const elapsed = now - bucket.lastRefill;
+  if (elapsed >= config.refillInterval) {
+    const refills = Math.floor(elapsed / config.refillInterval);
+    bucket.tokens = Math.min(
+      config.maxTokens,
+      bucket.tokens + refills * config.refillRate,
+    );
+    bucket.lastRefill = now;
+  }
+
+  if (bucket.tokens > 0) {
+    bucket.tokens--;
+    return true;
+  }
+
+  return false;
+}
 
 function generateRoomId(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -80,6 +118,30 @@ function cleanupRoom(roomId: string): void {
 
 io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
+
+  // Check for reconnection via session ID
+  const sessionId = socket.handshake.auth?.sessionId as string | undefined;
+  if (sessionId) {
+    const session = sessionRooms.get(sessionId);
+    if (session) {
+      const room = rooms.get(session.roomId);
+      if (room && room.reconnectPlayer(socket.id, session.color)) {
+        playerRooms.set(socket.id, session.roomId);
+        socket.join(session.roomId);
+
+        // Update session with new socket ID
+        sessionRooms.set(sessionId, session);
+
+        // Re-emit game state
+        io.to(session.roomId).emit("PLAYER_RECONNECTED", {
+          playerColor: session.color,
+        });
+        console.log(
+          `Player ${session.color} reconnected to room ${session.roomId}`,
+        );
+      }
+    }
+  }
 
   socket.on("CREATE_ROOM", ({ timeControl }) => {
     // Validate time control
@@ -171,6 +233,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("PLACE_PIECE", ({ type, square }) => {
+    if (!checkRateLimit(socket.id, "game", RATE_LIMIT_GAME)) {
+      socket.emit("ACTION_REJECTED", {
+        action: "PLACE_PIECE",
+        reason: "Too many actions",
+      });
+      return;
+    }
+
     const roomId = playerRooms.get(socket.id);
     if (!roomId) {
       socket.emit("ERROR", { message: "Not in a room" });
@@ -193,6 +263,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("MOVE_PIECE", ({ from, to }) => {
+    if (!checkRateLimit(socket.id, "game", RATE_LIMIT_GAME)) {
+      socket.emit("ACTION_REJECTED", {
+        action: "MOVE_PIECE",
+        reason: "Too many actions",
+      });
+      return;
+    }
+
     const roomId = playerRooms.get(socket.id);
     if (!roomId) {
       socket.emit("ERROR", { message: "Not in a room" });
@@ -283,6 +361,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("SEND_CHAT_MESSAGE", ({ text }) => {
+    if (!checkRateLimit(socket.id, "chat", RATE_LIMIT_CHAT)) {
+      return; // Silently drop rate-limited chat messages
+    }
+
     const roomId = playerRooms.get(socket.id);
     if (!roomId) return;
 
@@ -323,13 +405,34 @@ function handleDisconnect(socketId: string): void {
   const playerColor = room.removePlayer(socketId);
   playerRooms.delete(socketId);
 
+  // Clean up rate limit buckets for this socket
+  for (const key of rateLimitBuckets.keys()) {
+    if (key.startsWith(`${socketId}:`)) {
+      rateLimitBuckets.delete(key);
+    }
+  }
+
   if (playerColor) {
+    // Preserve session mapping for reconnection
+    const sessionId = Array.from(io.sockets.sockets.entries()).find(
+      ([id]) => id === socketId,
+    )?.[1]?.handshake?.auth?.sessionId as string | undefined;
+    if (sessionId) {
+      sessionRooms.set(sessionId, { roomId, color: playerColor });
+    }
+
     // Notify other player
     io.to(roomId).emit("PLAYER_DISCONNECTED", { playerColor });
     console.log(`Player ${playerColor} disconnected from room ${roomId}`);
 
     // If room is empty, clean it up
     if (room.isEmpty()) {
+      // Clean up session mappings for this room
+      for (const [sid, session] of sessionRooms.entries()) {
+        if (session.roomId === roomId) {
+          sessionRooms.delete(sid);
+        }
+      }
       cleanupRoom(roomId);
     }
   }

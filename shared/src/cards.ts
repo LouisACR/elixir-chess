@@ -17,7 +17,7 @@ export function drawCard(): PieceType {
 
   for (const [type, weight] of entries) {
     random -= weight;
-    if (random <= 0) return type as PieceType;
+    if (random < 0) return type as PieceType;
   }
   return "p";
 }
