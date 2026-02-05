@@ -44,36 +44,11 @@ function wouldBlockCheck(
   const originalFen = game.fen();
 
   try {
+    // Pawns can never be on rank 1 or 8, so they can't block check there
     const rank = parseInt(square[1]);
-    const isPawnOnBackRank = type === "p" && (rank === 1 || rank === 8);
+    if (type === "p" && (rank === 1 || rank === 8)) return false;
 
-    let success: boolean;
-    if (isPawnOnBackRank) {
-      const currentFen = game.fen();
-      const [position, ...rest] = currentFen.split(" ");
-      const rows = position.split("/");
-      const rankIndex = 8 - rank;
-      const file = square.charCodeAt(0) - 97;
-
-      let expandedRow = rows[rankIndex].replace(/[1-8]/g, (m) =>
-        ".".repeat(parseInt(m)),
-      );
-      const pieceChar = turn === "w" ? "P" : "p";
-      expandedRow =
-        expandedRow.substring(0, file) +
-        pieceChar +
-        expandedRow.substring(file + 1);
-      const compressedRow = expandedRow.replace(/\.+/g, (m) =>
-        m.length.toString(),
-      );
-      rows[rankIndex] = compressedRow;
-
-      const newFen = [rows.join("/"), ...rest].join(" ");
-      game.load(newFen);
-      success = true;
-    } else {
-      success = game.put({ type, color: turn }, square as Square);
-    }
+    const success = game.put({ type, color: turn }, square as Square);
 
     if (!success) {
       game.load(originalFen);
@@ -372,6 +347,11 @@ export class GameRoom {
     if (!isInPlacementZone(square, playerColor))
       return { success: false, reason: "Invalid placement zone" };
 
+    // Pawns cannot be placed on rank 1 or 8
+    const rank = parseInt(square[1]);
+    if (type === "p" && (rank === 1 || rank === 8))
+      return { success: false, reason: "Pawns cannot be placed on back rank" };
+
     const pieceAtSquare = this.chess.get(square as Square);
     if (pieceAtSquare) return { success: false, reason: "Square occupied" };
 
@@ -383,50 +363,18 @@ export class GameRoom {
     // Place the piece
     const wasInCheck = this.chess.inCheck();
     const originalFen = this.chess.fen();
-    const rank = parseInt(square[1]);
-    const isPawnOnBackRank = type === "p" && (rank === 1 || rank === 8);
 
-    let success: boolean;
-    if (isPawnOnBackRank) {
-      // FEN manipulation for pawns on back rank
-      const currentFen = this.chess.fen();
-      const [position, ...rest] = currentFen.split(" ");
-      const rows = position.split("/");
-      const rankIndex = 8 - rank;
-      const file = square.charCodeAt(0) - 97;
-
-      let expandedRow = rows[rankIndex].replace(/[1-8]/g, (m) =>
-        ".".repeat(parseInt(m)),
-      );
-      const pieceChar =
-        playerColor === "w" ? type.toUpperCase() : type.toLowerCase();
-      expandedRow =
-        expandedRow.substring(0, file) +
-        pieceChar +
-        expandedRow.substring(file + 1);
-      const compressedRow = expandedRow.replace(/\.+/g, (m) =>
-        m.length.toString(),
-      );
-      rows[rankIndex] = compressedRow;
-
-      const newFen = [rows.join("/"), ...rest].join(" ");
-      this.chess.load(newFen, { skipValidation: true });
-      success = true;
-    } else {
-      success = this.chess.put({ type, color: playerColor }, square as Square);
-    }
+    const success = this.chess.put(
+      { type, color: playerColor },
+      square as Square,
+    );
 
     if (!success) return { success: false, reason: "Failed to place piece" };
 
     // Verify no self-check after placement
     if (this.chess.inCheck() && this.chess.turn() === playerColor) {
-      // Restore original FEN (handles both normal put() and FEN manipulation paths)
-      this.chess.load(
-        this.chess.fen().split(" ")[0] === originalFen.split(" ")[0]
-          ? originalFen
-          : originalFen,
-        { skipValidation: true },
-      );
+      // Restore original position
+      this.chess.load(originalFen);
       return { success: false, reason: "Cannot place into check" };
     }
 
@@ -447,8 +395,7 @@ export class GameRoom {
     const fen = this.chess.fen();
     const parts = fen.split(" ");
     parts[1] = playerColor === "w" ? "b" : "w";
-    // Use skipValidation to allow non-standard positions (e.g., pawns on back rank)
-    this.chess.load(parts.join(" "), { skipValidation: true });
+    this.chess.load(parts.join(" "));
 
     // Update game state
     this.gameState.fen = this.chess.fen();

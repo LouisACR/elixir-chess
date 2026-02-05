@@ -179,48 +179,15 @@ export function useElixirChess() {
 
       if (!isInPlacementZone(square, turn)) return false;
 
+      // Pawns cannot be placed on rank 1 or 8
+      const rank = parseInt(square[1]);
+      if (type === "p" && (rank === 1 || rank === 8)) return false;
+
       // Execute placement
       const originalFen = game.fen();
 
       try {
-        // chess.js doesn't allow pawns on rank 1 or 8, so we handle this
-        // by placing a queen temporarily and then modifying the FEN
-        const rank = parseInt(square[1]);
-        const isPawnOnBackRank = type === "p" && (rank === 1 || rank === 8);
-
-        let success: boolean;
-        if (isPawnOnBackRank) {
-          // Place the pawn by directly manipulating the FEN
-          const currentFen = game.fen();
-          const [position, ...rest] = currentFen.split(" ");
-          const rows = position.split("/");
-          const rankIndex = 8 - rank; // FEN rows are from rank 8 to 1
-          const file = square.charCodeAt(0) - 97; // 'a' = 0, 'b' = 1, etc.
-
-          // Expand the row to 8 characters (replace numbers with dots)
-          let expandedRow = rows[rankIndex].replace(/[1-8]/g, (m) =>
-            ".".repeat(parseInt(m)),
-          );
-
-          // Place the pawn
-          const pieceChar = turn === "w" ? "P" : "p";
-          expandedRow =
-            expandedRow.substring(0, file) +
-            pieceChar +
-            expandedRow.substring(file + 1);
-
-          // Compress back (replace consecutive dots with numbers)
-          const compressedRow = expandedRow.replace(/\.+/g, (m) =>
-            m.length.toString(),
-          );
-          rows[rankIndex] = compressedRow;
-
-          const newFen = [rows.join("/"), ...rest].join(" ");
-          game.load(newFen);
-          success = true;
-        } else {
-          success = game.put({ type, color: turn }, square);
-        }
+        const success = game.put({ type, color: turn }, square);
 
         if (!success) return false;
 

@@ -172,6 +172,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
       if (!targetSquare) return;
 
       if (dragData.source === "shop") {
+        if (!dragValidMoves.includes(targetSquare)) return;
         placePiece(dragData.type, targetSquare);
       } else if (dragData.source === "board" && dragData.from) {
         makeMove(dragData.from as Square, targetSquare);
