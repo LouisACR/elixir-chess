@@ -178,7 +178,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
         makeMove(dragData.from as Square, targetSquare);
       }
     },
-    [placePiece, makeMove, isMyTurn],
+    [placePiece, makeMove, isMyTurn, dragValidMoves],
   );
 
   const handleSquareClick = useCallback(

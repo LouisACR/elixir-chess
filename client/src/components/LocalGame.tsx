@@ -126,7 +126,7 @@ export function LocalGame({ onBack }: LocalGameProps) {
         makeMove(dragData.from as Square, targetSquare);
       }
     },
-    [placePiece, makeMove],
+    [placePiece, makeMove, dragValidMoves],
   );
 
   const handleSquareClick = useCallback(
