@@ -80,6 +80,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
     isMyTurn,
     isInCheck,
     lastElixirGain,
+    lastMove,
     selectedSquare,
     validMoves,
     selectSquare,
@@ -224,6 +225,10 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
 
   const myElixir = playerColor ? gameState.elixir[playerColor] : 0;
   const displayedValidMoves = activeDragData ? dragValidMoves : validMoves;
+  const lastMoveSquares = useMemo(() => {
+    if (!lastMove) return [];
+    return lastMove.from ? [lastMove.from, lastMove.to] : [lastMove.to];
+  }, [lastMove]);
 
   return (
     <DndContext
@@ -290,6 +295,7 @@ export function MultiplayerGame({ onBack }: MultiplayerGameProps) {
             game={chess}
             selectedSquare={selectedSquare}
             validMoves={displayedValidMoves}
+            lastMoveSquares={lastMoveSquares}
             onSquareClick={handleSquareClick}
             flipped={playerColor === "b"}
             premoves={premoves}

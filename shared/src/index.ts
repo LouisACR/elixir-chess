@@ -36,6 +36,11 @@ export type GameStatus =
   | "disconnected"
   | "resigned";
 
+export interface LastMove {
+  from?: string; // undefined for piece placements
+  to: string;
+}
+
 export interface GameState {
   fen: string;
   turn: PlayerColor;
@@ -87,6 +92,7 @@ export interface PlayerView {
     myHand: CardHand;
     opponentCardCount: number;
     premoves: Premove[];
+    lastMove?: LastMove;
   };
 }
 

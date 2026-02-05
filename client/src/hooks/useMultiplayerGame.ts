@@ -10,6 +10,7 @@ import type {
   Premove,
   Piece,
   TimeControlType,
+  LastMove,
 } from "@elixir-chess/shared";
 import {
   STARTING_ELIXIR,
@@ -251,6 +252,7 @@ export interface MultiplayerGameState {
   myHand: CardHand;
   opponentCardCount: number;
   premoves: Premove[];
+  lastMove?: LastMove;
 }
 
 interface OptimisticAction {
@@ -986,6 +988,7 @@ export function useMultiplayerGame() {
     isMyTurn,
     isInCheck,
     lastElixirGain,
+    lastMove: gameState.lastMove ?? null,
 
     // Selection
     selectedSquare,

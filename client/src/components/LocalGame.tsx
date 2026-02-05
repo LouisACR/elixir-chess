@@ -70,6 +70,7 @@ export function LocalGame({ onBack }: LocalGameProps) {
     selectSquare,
     isInCheck,
     lastElixirGain,
+    lastMove,
   } = useElixirChess();
 
   const [activeDragData, setActiveDragData] = useState<DragData | null>(null);
@@ -155,6 +156,10 @@ export function LocalGame({ onBack }: LocalGameProps) {
   const currentHand = gameState.hands[gameState.turn];
   const currentElixir = gameState.elixir[gameState.turn];
   const displayedValidMoves = activeDragData ? dragValidMoves : validMoves;
+  const lastMoveSquares = useMemo(() => {
+    if (!lastMove) return [];
+    return lastMove.from ? [lastMove.from, lastMove.to] : [lastMove.to];
+  }, [lastMove]);
 
   return (
     <DndContext
@@ -184,6 +189,7 @@ export function LocalGame({ onBack }: LocalGameProps) {
             game={chess}
             selectedSquare={selectedSquare}
             validMoves={displayedValidMoves}
+            lastMoveSquares={lastMoveSquares}
             onSquareClick={handleSquareClick}
           />
         </div>

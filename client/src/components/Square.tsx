@@ -9,6 +9,7 @@ interface SquareProps {
   isValidDrop?: boolean;
   isSelected?: boolean;
   isKingInCheck?: boolean;
+  isLastMove?: boolean;
   isPremoveFrom?: boolean;
   isPremoveTo?: boolean;
   isPremoveValid?: boolean;
@@ -22,6 +23,7 @@ export const Square = ({
   isValidDrop,
   isSelected,
   isKingInCheck,
+  isLastMove,
   isPremoveFrom,
   isPremoveTo,
   isPremoveValid,
@@ -48,9 +50,13 @@ export const Square = ({
         ? isBlack
           ? "bg-purple-700"
           : "bg-purple-500"
-        : isBlack
-          ? "bg-gray-700"
-          : "bg-gray-600";
+        : isLastMove
+          ? isBlack
+            ? "bg-yellow-700/60"
+            : "bg-yellow-500/50"
+          : isBlack
+            ? "bg-gray-700"
+            : "bg-gray-600";
 
   return (
     <div

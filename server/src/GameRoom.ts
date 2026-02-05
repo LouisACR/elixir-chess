@@ -153,6 +153,9 @@ export class GameRoom {
   // Draw offer state
   private pendingDrawOffer: PlayerColor | null = null;
 
+  // Last move/placement for highlighting
+  private lastAction: { from?: string; to: string } | null = null;
+
   constructor(
     roomId: string,
     emitter: RoomEventEmitter,
@@ -391,6 +394,9 @@ export class GameRoom {
       hand.nextCard = hand.deck.shift()!;
     }
 
+    // Track last action for highlighting
+    this.lastAction = { to: square };
+
     // Switch turn via FEN manipulation
     const fen = this.chess.fen();
     const parts = fen.split(" ");
@@ -445,6 +451,9 @@ export class GameRoom {
       });
 
       if (!move) return { success: false, reason: "Invalid move" };
+
+      // Track last action for highlighting
+      this.lastAction = { from: from, to: to };
 
       // Update game state
       this.gameState.fen = this.chess.fen();
@@ -644,6 +653,7 @@ export class GameRoom {
         myHand: this.gameState.hands[color],
         opponentCardCount: opponentHand.cards.length,
         premoves: this.premoves[color],
+        lastMove: this.lastAction ?? undefined,
       },
     };
   }

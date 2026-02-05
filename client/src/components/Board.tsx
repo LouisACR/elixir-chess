@@ -8,6 +8,7 @@ interface BoardProps {
   game: Chess;
   selectedSquare?: string | null;
   validMoves?: string[];
+  lastMoveSquares?: string[];
   premoveValidMoves?: string[];
   premoves?: Premove[];
   ghostPieces?: GhostPiece[];
@@ -21,6 +22,7 @@ export const Board: React.FC<BoardProps> = ({
   game,
   selectedSquare,
   validMoves = [],
+  lastMoveSquares = [],
   premoveValidMoves = [],
   premoves = [],
   ghostPieces = [],
@@ -84,6 +86,7 @@ export const Board: React.FC<BoardProps> = ({
           const isSelected = selectedSquare === squareId;
           const isValidMove = validMoves.includes(squareId);
           const isKingInCheck = kingInCheckSquare === squareId;
+          const isLastMove = lastMoveSquares.includes(squareId);
           const isPremoveFrom = premoveSquares.fromSquares.has(squareId);
           const isPremoveTo = premoveSquares.toSquares.has(squareId);
           const isPremoveValid = premoveValidMoves.includes(squareId);
@@ -107,6 +110,7 @@ export const Board: React.FC<BoardProps> = ({
               isSelected={isSelected}
               isValidDrop={isValidMove}
               isKingInCheck={isKingInCheck}
+              isLastMove={isLastMove}
               isPremoveFrom={isPremoveFrom}
               isPremoveTo={isPremoveTo}
               isPremoveValid={isPremoveValid}

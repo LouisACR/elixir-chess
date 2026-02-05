@@ -6,6 +6,7 @@ import type {
   PlayerColor,
   PieceType,
   ElixirGainEvent,
+  LastMove,
 } from "@elixir-chess/shared";
 import {
   INITIAL_FEN,
@@ -57,6 +58,7 @@ export function useElixirChess() {
   const [lastElixirGain, setLastElixirGain] = useState<ElixirGainEvent | null>(
     null,
   );
+  const [lastMove, setLastMove] = useState<LastMove | null>(null);
 
   // Separate timer state to avoid conflicts with gameState updates
   const [timers, setTimers] = useState<Record<PlayerColor, number>>({
@@ -131,6 +133,7 @@ export function useElixirChess() {
     setGameState(createInitialGameState());
     setTimers({ w: INITIAL_TIME, b: INITIAL_TIME });
     setLastElixirGain(null);
+    setLastMove(null);
   }, []);
 
   const selectSquare = useCallback(
@@ -269,6 +272,7 @@ export function useElixirChess() {
           history: game.history(),
         }));
 
+        setLastMove({ to: square });
         setSelectedSquare(null);
         setValidMoves([]);
         return true;
@@ -353,6 +357,7 @@ export function useElixirChess() {
           history: game.history(),
         }));
 
+        setLastMove({ from, to });
         setSelectedSquare(null);
         setValidMoves([]);
         return true;
@@ -376,6 +381,7 @@ export function useElixirChess() {
     validMoves,
     isInCheck: chessRef.current.inCheck(),
     lastElixirGain,
+    lastMove,
 
     // Actions
     resetGame,
